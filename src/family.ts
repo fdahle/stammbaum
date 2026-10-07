@@ -5,6 +5,12 @@ export interface Partnership {
   partner: Person | undefined;
 }
 
+export interface SearchOptions {
+  /** More text to match per person, e.g. what they are to whoever is looking. */
+  extra?: ((person: Person) => Array<string | undefined>) | undefined;
+  limit?: number;
+}
+
 /** Derived lookups over the parsed graph — everything the views ask for. */
 export class Family {
   readonly graph: FamilyGraph;
@@ -72,29 +78,57 @@ export class Family {
       .filter((brood) => brood.children.length > 0);
   }
 
-  search(query: string): Person[] {
-    const needle = normalise(query);
-    if (needle === '') return [];
+  /**
+   * Every word of the query has to turn up somewhere — name, nickname, places,
+   * job, note, year of birth or whatever `extra` adds — so "klaus lindau" finds
+   * the Klaus from Lindau.
+   */
+  search(query: string, options: SearchOptions = {}): Person[] {
+    const words = normalise(query).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [];
     return this.people()
-      .map((person) => ({ person, score: score(person, needle) }))
+      .map((person) => {
+        const haystacks = [...fields(person), ...(options.extra?.(person) ?? [])].map((h) => normalise(h ?? ''));
+        let total = 0;
+        for (const word of words) {
+          const best = score(haystacks, word);
+          if (best === 0) return { person, score: 0 };
+          total += best;
+        }
+        return { person, score: total };
+      })
       .filter((hit) => hit.score > 0)
       .sort((a, b) => b.score - a.score || a.person.name.localeCompare(b.person.name))
-      .slice(0, 8)
+      .slice(0, options.limit ?? 8)
       .map((hit) => hit.person);
   }
 }
 
-function score(person: Person, needle: string): number {
-  const haystacks = [person.name, person.nick ?? '', person.maiden ?? '', person.id];
+/** What a person can be found by, best match first. */
+function fields(person: Person): Array<string | undefined> {
+  return [
+    person.name,
+    person.nick,
+    person.maiden,
+    person.id,
+    person.lives,
+    person.birthplace,
+    person.job,
+    person.born?.slice(0, 4),
+    person.deathplace,
+    person.note,
+  ];
+}
+
+/** Word starts beat matches inside a word, and earlier fields beat later ones. */
+function score(haystacks: string[], needle: string): number {
   let best = 0;
-  for (const [index, raw] of haystacks.entries()) {
-    const value = normalise(raw);
+  for (const [index, value] of haystacks.entries()) {
     if (value === '') continue;
     const at = value.indexOf(needle);
     if (at === -1) continue;
-    // Prefer word starts, and the real name over the id.
-    const positional = at === 0 || value[at - 1] === ' ' ? 3 : 1;
-    best = Math.max(best, positional * 10 - index);
+    const wordStart = at === 0 || value.includes(` ${needle}`) || value.includes(`-${needle}`);
+    best = Math.max(best, (wordStart ? 3 : 1) * 100 - index);
   }
   return best;
 }

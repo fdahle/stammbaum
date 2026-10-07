@@ -3,6 +3,7 @@ import './styles/app.css';
 import { loadFamily } from './data';
 import { Family } from './family';
 import { LANGS, lang, setLang, t } from './i18n';
+import { relation } from './kinship';
 import type { Person } from './parser/types';
 import { lifespan } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
@@ -91,6 +92,27 @@ function setViewer(id: string | null): void {
   refresh();
 }
 
+/** What someone is to the viewer, in the current language — cached, since search asks a lot. */
+const captions = new Map<string, string | undefined>();
+function caption(person: Person): string | undefined {
+  const me = viewer();
+  if (!me) return undefined;
+  const key = `${me}|${lang()}|${person.id}`;
+  if (!captions.has(key)) captions.set(key, relation(family, me, person.id, lang()));
+  return captions.get(key);
+}
+
+/** Search finds people by what they are to you, in either language: "tante", "aunt". */
+function relationWords(person: Person): Array<string | undefined> {
+  const me = viewer();
+  if (!me) return [];
+  const key = `${me}|*|${person.id}`;
+  if (!captions.has(key)) {
+    captions.set(key, LANGS.map(({ id }) => relation(family, me, person.id, id) ?? '').join(' '));
+  }
+  return [captions.get(key)];
+}
+
 async function chooseViewer(): Promise<void> {
   menu.open = false;
   const chosen = await pickPerson(family, { title: t().whoAreYou, none: true });
@@ -173,7 +195,7 @@ function openPerson(person: Person): void {
 }
 
 searchInput.addEventListener('input', () => {
-  hits = family.search(searchInput.value);
+  hits = family.search(searchInput.value, { extra: relationWords });
   if (hits.length === 0) {
     closeResults();
     return;
@@ -187,10 +209,10 @@ searchInput.addEventListener('input', () => {
       button.className = 'result flex w-full items-baseline justify-between gap-3';
       const name = document.createElement('span');
       name.textContent = person.name;
-      const years = document.createElement('small');
-      years.className = 'opacity-60 tabular-nums';
-      years.textContent = lifespan(person);
-      button.append(name, years);
+      const detail = document.createElement('small');
+      detail.className = 'opacity-60 tabular-nums text-right';
+      detail.textContent = [caption(person), lifespan(person)].filter(Boolean).join(' · ');
+      button.append(name, detail);
       button.addEventListener('click', () => openPerson(person));
       item.append(button);
       return item;
@@ -308,6 +330,7 @@ function segmented<T extends string>(
 
 /** After the language or the viewer changed: every word and every caption again. */
 function refresh(): void {
+  captions.clear();
   localize();
   overview.localize();
   route();

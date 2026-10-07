@@ -1,4 +1,4 @@
-import type { Family } from '../family';
+import type { Family, SearchOptions } from '../family';
 import { t } from '../i18n';
 import type { Person } from '../parser/types';
 import { lifespan } from './format';
@@ -11,6 +11,8 @@ export interface PickOptions {
   none?: boolean;
   /** A line under each name — typically what they are to whoever is looking. */
   caption?: (person: Person) => string | undefined;
+  /** Extra text to search, passed on to `Family.search`. */
+  extra?: SearchOptions['extra'];
   exclude?: string;
 }
 
@@ -64,7 +66,7 @@ export function pickPerson(family: Family, options: PickOptions): Promise<Person
     const render = () => {
       const query = input.value.trim();
       const people = query
-        ? family.search(query).filter((p) => p.id !== options.exclude)
+        ? family.search(query, { extra: options.extra, limit: 50 }).filter((p) => p.id !== options.exclude)
         : everyone;
       if (people.length === 0) {
         const empty = document.createElement('li');

@@ -48,6 +48,22 @@ describe('Family', () => {
   it('returns nothing for a blank query', () => {
     expect(family.search('   ')).toEqual([]);
   });
+
+  it('finds people by place, job and year of birth', () => {
+    expect(family.search('lissabon')[0]?.id).toBe('jonas');
+    expect(family.search('schreiner')[0]?.id).toBe('heinrich');
+    expect(family.search('1989')[0]?.id).toBe('jonas');
+  });
+
+  it('needs every word of the query to match', () => {
+    expect(family.search('bauer lindau').map((p) => p.id).sort()).toEqual(['elisabeth', 'heinrich', 'klaus']);
+    expect(family.search('klaus lissabon')).toEqual([]);
+  });
+
+  it('searches extra words, such as what someone is to the viewer', () => {
+    const extra = (p: { id: string }) => [p.id === 'brigitte' ? 'Tante' : undefined];
+    expect(family.search('tante', { extra }).map((p) => p.id)).toEqual(['brigitte']);
+  });
 });
 
 describe('adoption', () => {
