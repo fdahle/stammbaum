@@ -15,6 +15,8 @@ const PATHS = {
   moon: ['M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z'],
   auto: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'M12 3v18a9 9 0 0 0 0-18z'],
   menu: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
+  next: ['M9 6l6 6-6 6'],
+  previous: ['M15 6l-6 6 6 6'],
 } as const;
 
 export type IconName = keyof typeof PATHS;

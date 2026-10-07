@@ -45,9 +45,14 @@ export class Family {
     return this.unionsByChild.get(id)?.[0];
   }
 
+  /** Birth parents and adoptive parents, when the file has both. */
   parents(id: string): Person[] {
-    const union = this.parentUnion(id);
-    return union ? union.partners.map((p) => this.person(p)).filter(isPerson) : [];
+    const ids = (this.unionsByChild.get(id) ?? []).flatMap((union) => union.partners);
+    return [...new Set(ids)].map((p) => this.person(p)).filter(isPerson);
+  }
+
+  adopted(id: string): boolean {
+    return (this.unionsByChild.get(id) ?? []).some((union) => union.adopted?.includes(id));
   }
 
   /** Children grouped by the partnership they came from. */

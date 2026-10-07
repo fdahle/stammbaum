@@ -457,10 +457,17 @@
     border-top: 1px solid var(--color-base-300);
   }
 
+  .focus-job,
+  .focus-lives,
+  .focus-adopted,
   .focus-age {
     margin: 0;
     font-size: 0.875rem;
     color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .focus-job {
+    font-style: italic;
   }
 
   .focus-age {
@@ -470,6 +477,35 @@
 
   .focus-birthday {
     margin: 6px 0 0;
+  }
+
+  .focus-card .bubble-html.is-zoomable {
+    cursor: zoom-in;
+  }
+
+  .focus-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .gallery-thumb {
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--radius-field);
+    background: var(--color-base-200);
+    cursor: zoom-in;
+  }
+
+  .gallery-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   /* ---- app bar, search, floating bits ----------------------------------- */
@@ -572,6 +608,53 @@
   .settings-panel .join .icon {
     width: 1rem;
     height: 1rem;
+  }
+
+  /* ---- lightbox --------------------------------------------------------- */
+
+  /* As large as the screen allows, small source pictures included. */
+  .lightbox-image {
+    width: min(calc(100vw - 32px), 720px);
+    height: auto;
+    max-height: calc(100dvh - 120px);
+    border-radius: var(--radius-box);
+    object-fit: contain;
+    touch-action: pan-y;
+    user-select: none;
+  }
+
+  .lightbox-counter {
+    position: fixed;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    margin: 0;
+    text-align: center;
+    font-size: 0.8125rem;
+    color: rgb(255 255 255 / 0.75);
+  }
+
+  .lightbox .btn {
+    position: fixed;
+  }
+
+  .lightbox-close {
+    top: calc(12px + env(safe-area-inset-top));
+    right: 12px;
+  }
+
+  .lightbox-previous,
+  .lightbox-next {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .lightbox-previous {
+    left: 8px;
+  }
+
+  .lightbox-next {
+    right: 8px;
   }
 
   .fab-fit {
@@ -686,4 +769,18 @@
       transition: none !important;
     }
   }
+}
+
+/*
+ * Outside the layer on purpose: daisyUI's modal backdrop and button colours
+ * are unlayered, and an unlayered rule beats every layered one. The lightbox
+ * is dark in both themes, so its buttons are white in both.
+ */
+.modal.lightbox[open] {
+  background-color: rgb(0 0 0 / 0.88);
+}
+
+.modal.lightbox .btn {
+  --btn-fg: #fff;
+  color: #fff;
 }

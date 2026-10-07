@@ -107,9 +107,10 @@ nina + david together=2012 separated=2018
 | `me <id>` | Whose point of view relations are named from. |
 | `%% …` | Comment. |
 
-**Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`.
+**Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`,
+`birthplace`, `deathplace`, `job`, `lives`, `photos`.
 **Partnership keys** — `married`, `divorced`, `together`, `separated`,
-`children`.
+`children`, `adopted`.
 
 Notes:
 
@@ -137,10 +138,19 @@ Notes:
   Jahre alt* with a `died` date too — and a note on the birthday itself. With
   only a year it says *etwa*. A lasting partnership says how long it has
   lasted: *seit 2001 · 25 J.*
+- `birthplace`, `deathplace`, `job` and `lives` are free text and shown as
+  written: `* 2. April 1931 in Lindau`, *Wohnt in Lissabon*. Quote anything
+  with spaces: `deathplace="Bad Wörishofen"`.
+- `adopted=<child>, …` lists children of a partnership who were adopted. They
+  count as children everywhere — no `->` needed — and their card says so. A
+  child may also appear in two partnerships, birth parents and adoptive ones.
+  Attributes may come before or after the `->` children.
 - Statements about one partnership may be split across lines and written in
   either partner order; they merge.
 - Photos are file names inside the `photos/` folder next to `family.md`. Anyone
   without a photo gets an initials bubble in a colour derived from their id.
+  `photos=a.jpg, b.jpg` adds more pictures; the card shows them as a gallery,
+  and tapping the portrait opens them full screen.
 - Undeclared ids still render, and the app shows a dismissible list of hints
   about the file — a half-finished tree never breaks the page.
 
@@ -148,8 +158,8 @@ Notes:
 
 The menu switches between **Deutsch** and **English**; the first visit follows
 the browser's language. Everything the app says is translated, the relation
-words included. What the family file says — names and notes — is shown as
-written.
+words included. What the family file says — names, notes, places, jobs — is
+shown as written.
 
 ## Appearance
 

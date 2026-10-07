@@ -75,6 +75,27 @@ describe('parseFamily', () => {
     expect(graph.warnings[0]?.message).toBe('unknown person attribute "height"');
   });
 
+  it('reads places, job and a list of photos', () => {
+    const graph = parseFamily(
+      '```family\nperson a "A" birthplace=Lindau deathplace="Bad Wörishofen" job="Lehrerin" lives=Lissabon photos=a.jpg, b.jpg\n```',
+    );
+    expect(graph.people.get('a')).toMatchObject({
+      birthplace: 'Lindau',
+      deathplace: 'Bad Wörishofen',
+      job: 'Lehrerin',
+      lives: 'Lissabon',
+      photos: ['a.jpg', 'b.jpg'],
+    });
+    expect(graph.warnings).toEqual([]);
+  });
+
+  it('makes adopted children children of the partnership, and remembers which', () => {
+    const graph = parseFamily('```family\na + b -> c adopted=d, e\n```');
+    expect(graph.unions[0]).toMatchObject({ children: ['c', 'd', 'e'], adopted: ['d', 'e'] });
+    const both = parseFamily('```family\na + b adopted=d -> d\n```');
+    expect(both.unions[0]).toMatchObject({ children: ['d'], adopted: ['d'] });
+  });
+
   it('has no warnings for the shipped sample data', () => {
     expect(parseFamily(sample).warnings).toEqual([]);
   });

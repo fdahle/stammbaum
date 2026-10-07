@@ -1,3 +1,4 @@
+import { galleryUrls } from '../data';
 import type { Family } from '../family';
 import { lang, t } from '../i18n';
 import { relation } from '../kinship';
@@ -12,6 +13,7 @@ import {
 import { bubble, tile } from '../ui/tile';
 import { ageOf, hasBirthday, longDate, parseDate, shortName, today, year, yearsBetween } from '../ui/format';
 import { weddingRings, RINGS } from '../ui/icons';
+import { openLightbox } from '../ui/lightbox';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -57,7 +59,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   left.className = 'partner-slot slot-left';
   const right = document.createElement('div');
   right.className = 'partner-slot slot-right';
-  const card = focusCard(person, kin(person));
+  const card = focusCard(family, person, kin(person));
   focusTier.append(left, card, right);
   root.append(focusTier);
 
@@ -129,10 +131,11 @@ function section(className: string, label: string): HTMLElement {
   return element;
 }
 
-function focusCard(person: Person, relation: string | undefined): HTMLElement {
+function focusCard(family: Family, person: Person, relation: string | undefined): HTMLElement {
   const card = document.createElement('div');
   card.className = `focus-card card bg-base-100 shadow-sm${person.died ? ' is-deceased' : ''}`;
-  card.append(bubble(person));
+  const portrait = bubble(person);
+  card.append(portrait);
 
   const name = document.createElement('h1');
   name.className = 'focus-name';
@@ -144,12 +147,18 @@ function focusCard(person: Person, relation: string | undefined): HTMLElement {
     card.append(line('focus-nick', lang() === 'de' ? `„${person.nick}“` : `“${person.nick}”`));
   }
   if (person.maiden) card.append(line('focus-maiden', t().nee(person.maiden)));
+  if (person.job) card.append(line('focus-job', person.job));
 
   const now = today();
   const dates: string[] = [];
-  if (person.born) dates.push(`* ${longDate(person.born)}`);
-  if (person.died) dates.push(`† ${longDate(person.died)}`);
-  if (dates.length > 0) card.append(line('focus-dates', dates.join('   ')));
+  // `* 2. April 1931 in Lindau` — the date, the place, or both.
+  const dated = (mark: string, date: string | undefined, where: string | undefined) => {
+    if (!date && !where) return;
+    dates.push([mark, longDate(date), where && t().inPlace(where)].filter(Boolean).join(' '));
+  };
+  dated('*', person.born, person.birthplace);
+  dated('†', person.died, person.deathplace);
+  if (dates.length > 0) card.append(line('focus-dates', dates.join('\n')));
 
   const age = ageOf(person, now);
   if (age) card.append(line('focus-age', age.final ? t().ageAtDeath(age.years, age.approx) : t().age(age.years, age.approx)));
@@ -157,7 +166,33 @@ function focusCard(person: Person, relation: string | undefined): HTMLElement {
     const badge = line('focus-birthday badge badge-accent', t().birthdayToday);
     card.append(badge);
   }
+  if (person.lives) card.append(line('focus-lives', t().lives(person.lives)));
+  if (family.adopted(person.id)) card.append(line('focus-adopted', t().adopted));
   if (person.note) card.append(line('focus-note', person.note));
+
+  const pictures = galleryUrls(person);
+  if (pictures.length > 0) {
+    portrait.classList.add('is-zoomable');
+    portrait.addEventListener('click', () => openLightbox(pictures, 0, person.name));
+  }
+  if (pictures.length > 1) {
+    const gallery = document.createElement('div');
+    gallery.className = 'focus-gallery';
+    pictures.forEach((url, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'gallery-thumb';
+      button.setAttribute('aria-label', t().photo(index + 1, pictures.length));
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = '';
+      image.loading = 'lazy';
+      button.append(image);
+      button.addEventListener('click', () => openLightbox(pictures, index, person.name));
+      gallery.append(button);
+    });
+    card.append(gallery);
+  }
   return card;
 }
 

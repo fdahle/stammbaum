@@ -49,3 +49,11 @@ describe('Family', () => {
     expect(family.search('   ')).toEqual([]);
   });
 });
+
+describe('adoption', () => {
+  it('makes adopted children children, and marks them', () => {
+    expect(family.parents('marie').map((p) => p.id)).toEqual(['thomas', 'petra']);
+    expect(family.adopted('marie')).toBe(true);
+    expect(family.adopted('nina')).toBe(false);
+  });
+});

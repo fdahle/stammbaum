@@ -14,6 +14,14 @@ export interface Person {
   /** Nickname — what the family actually calls them. */
   nick?: string;
   note?: string;
+  birthplace?: string;
+  deathplace?: string;
+  /** What they do, or did, for a living. */
+  job?: string;
+  /** Where they live now. */
+  lives?: string;
+  /** More pictures for the gallery in the detail view, next to `photo`. */
+  photos?: string[];
   /** True when the person was only referenced by a relation, never declared. */
   stub?: boolean;
 }
@@ -32,6 +40,8 @@ export interface Union {
   /** End of an unmarried relationship — `separated` instead of `divorced`. */
   separated?: string;
   children: string[];
+  /** The children who were adopted — every one of them is in `children` too. */
+  adopted?: string[];
 }
 
 /**

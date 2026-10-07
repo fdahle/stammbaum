@@ -37,6 +37,7 @@ const de = {
   language: 'Sprache',
   appearance: 'Darstellung',
   modes: { system: 'Automatisch', light: 'Hell', dark: 'Dunkel' },
+  close: 'Schließen',
 
   fit: 'Ganzen Stammbaum zeigen',
 
@@ -55,9 +56,15 @@ const de = {
   since: (year: string) => `seit ${year}`,
   /** How long a lasting partnership has gone on, inside its pill. */
   yearsTogether: (years: number) => `${years} J.`,
+  inPlace: (place: string) => `in ${place}`,
   age: (years: number, isApprox: boolean) => `${approx('etwa ', years, isApprox)} Jahre`,
   ageAtDeath: (years: number, isApprox: boolean) => `wurde ${approx('etwa ', years, isApprox)} Jahre alt`,
   birthdayToday: 'Hat heute Geburtstag!',
+  lives: (place: string) => `Wohnt in ${place}`,
+  adopted: 'Adoptiert',
+  photo: (n: number, of: number) => `Foto ${n} von ${of}`,
+  previousPhoto: 'Voriges Foto',
+  nextPhoto: 'Nächstes Foto',
 };
 
 type Dict = typeof de;
@@ -84,6 +91,7 @@ const en: Dict = {
   language: 'Language',
   appearance: 'Appearance',
   modes: { system: 'Automatic', light: 'Light', dark: 'Dark' },
+  close: 'Close',
 
   fit: 'Show the whole tree',
 
@@ -101,9 +109,15 @@ const en: Dict = {
   },
   since: (year) => `since ${year}`,
   yearsTogether: (years) => `${years} y`,
+  inPlace: (place) => `in ${place}`,
   age: (years, isApprox) => `${approx('about ', years, isApprox)} years old`,
   ageAtDeath: (years, isApprox) => `died aged ${approx('about ', years, isApprox)}`,
   birthdayToday: 'Birthday today!',
+  lives: (place) => `Lives in ${place}`,
+  adopted: 'Adopted',
+  photo: (n, of) => `Photo ${n} of ${of}`,
+  previousPhoto: 'Previous photo',
+  nextPhoto: 'Next photo',
 };
 
 const DICTS: Record<Lang, Dict> = { de, en };

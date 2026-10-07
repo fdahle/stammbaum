@@ -7,7 +7,8 @@ import { type Diagnostic, type FamilyGraph, type Person, type Sex, type Union, u
  * markdown prose that the parser ignores. Grammar (one statement per line):
  *
  *   person <id> "<Name>" [key=value ...]     born= died= photo= maiden= nick= note= sex=
- *   <a> + <b> [key=value ...]                married= divorced= together= separated=
+ *                                            birthplace= deathplace= job= lives= photos=
+ *   <a> + <b> [key=value ...]                married= divorced= together= separated= adopted=
  *   <a> + <b> -> <child>, <child>            children of that union
  *   <a> -> <child>                           children with an unknown second parent
  *   me <id>                                  whose point of view relations are named from
@@ -96,14 +97,17 @@ function tokenize(text: string): Token[] {
   return tokens;
 }
 
-const PERSON_KEYS = new Set(['born', 'died', 'photo', 'maiden', 'nick', 'note', 'sex']);
+const PERSON_KEYS = new Set([
+  'born', 'died', 'photo', 'maiden', 'nick', 'note', 'sex',
+  'birthplace', 'deathplace', 'job', 'lives', 'photos',
+]);
 /** `w` for weiblich, since the people writing the file speak German. */
 const SEXES = new Map<string, Sex>([
   ['m', 'm'],
   ['f', 'f'],
   ['w', 'f'],
 ]);
-const UNION_KEYS = new Set(['married', 'divorced', 'together', 'separated', 'children']);
+const UNION_KEYS = new Set(['married', 'divorced', 'together', 'separated', 'children', 'adopted']);
 
 function readPerson(tokens: Token[], people: Map<string, Person>, warn: (m: string) => void): void {
   const id = tokens[1]?.value;
@@ -133,6 +137,10 @@ function readPerson(tokens: Token[], people: Map<string, Person>, warn: (m: stri
       else warn(`sex must be m or f, got "${value}"`);
       continue;
     }
+    if (key === 'photos') {
+      person.photos = list(value);
+      continue;
+    }
     person[key as 'born'] = value;
   }
 }
@@ -140,7 +148,11 @@ function readPerson(tokens: Token[], people: Map<string, Person>, warn: (m: stri
 function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: string) => void): void {
   const arrow = tokens.findIndex((t) => !t.quoted && t.value === '->');
   const left = arrow === -1 ? tokens : tokens.slice(0, arrow);
-  const right = arrow === -1 ? [] : tokens.slice(arrow + 1);
+  let right = arrow === -1 ? [] : tokens.slice(arrow + 1);
+  // `a + b -> c adopted=d` — attributes may also follow the children.
+  const trailing = right.findIndex((t) => !t.quoted && t.value.includes('='));
+  const after = trailing === -1 ? [] : right.slice(trailing);
+  if (trailing !== -1) right = right.slice(0, trailing);
 
   const partners: string[] = [left[0]!.value];
   let rest = left.slice(1);
@@ -169,18 +181,31 @@ function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: str
     .map((c) => c.trim())
     .filter((c) => c !== '');
 
-  for (const [key, value] of attributes(rest, warn)) {
+  for (const [key, value] of attributes([...rest, ...after], warn)) {
     if (!UNION_KEYS.has(key)) {
       warn(`unknown relation attribute "${key}"`);
       continue;
     }
-    if (key === 'children') children.push(...value.split(',').map((c) => c.trim()).filter(Boolean));
-    else union[key as 'married'] = value;
+    if (key === 'children') children.push(...list(value));
+    else if (key === 'adopted') {
+      // Adopted children are children like any other, just marked.
+      const adopted = list(value);
+      children.push(...adopted);
+      union.adopted = [...new Set([...(union.adopted ?? []), ...adopted])];
+    } else union[key as 'married'] = value;
   }
 
   for (const child of children) {
     if (!union.children.includes(child)) union.children.push(child);
   }
+}
+
+/** `a, b,c` → `['a', 'b', 'c']`. */
+function list(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function attributes(tokens: Token[], warn: (m: string) => void): Array<[string, string]> {

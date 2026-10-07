@@ -21,3 +21,9 @@ export function loadFamily(): FamilyGraph {
 export function photoUrl(person: Person): string | undefined {
   return person.photo ? byFileName.get(person.photo) : undefined;
 }
+
+/** Every picture of someone that exists: the portrait first, then `photos=`. */
+export function galleryUrls(person: Person): string[] {
+  const names = [person.photo, ...(person.photos ?? [])].filter((name): name is string => !!name);
+  return [...new Set(names)].map((name) => byFileName.get(name)).filter((url): url is string => !!url);
+}
