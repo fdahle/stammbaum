@@ -1,4 +1,5 @@
 import type { Family } from '../family';
+import { lang, t } from '../i18n';
 import { relation } from '../kinship';
 import {
   unionEnd,
@@ -32,11 +33,11 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   const broods = family.broods(person.id);
   // Everyone is captioned with what they are to the file's `me`.
   const me = family.me();
-  const kin = (other: Person) => (me ? relation(family, me.id, other.id) : undefined);
+  const kin = (other: Person) => (me ? relation(family, me.id, other.id, lang()) : undefined);
 
   const parentTiles: HTMLElement[] = [];
   if (parents.length > 0) {
-    const tier = section('tier tier-parents', 'Eltern');
+    const tier = section('tier tier-parents', t().parents);
     const row = document.createElement('div');
     row.className = 'row';
     for (const parent of parents) {
@@ -78,7 +79,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
 
   const broodTiles: Array<{ union: Union; tiles: HTMLElement[] }> = [];
   if (broods.length > 0) {
-    const tier = section('tier tier-children', broods.flatMap((b) => b.children).length === 1 ? 'Kind' : 'Kinder');
+    const tier = section('tier tier-children', broods.flatMap((b) => b.children).length === 1 ? t().child : t().children);
     const groups = document.createElement('div');
     groups.className = 'broods';
     for (const brood of broods) {
@@ -87,7 +88,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
       if (broods.length > 1 && brood.partner) {
         const caption = document.createElement('span');
         caption.className = 'brood-label';
-        caption.textContent = `mit ${shortName(brood.partner)}`;
+        caption.textContent = t().withPartner(shortName(brood.partner));
         group.append(caption);
       }
       const row = document.createElement('div');
@@ -108,7 +109,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   if (parents.length === 0 && partnerships.length === 0 && broods.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'opacity-60';
-    empty.textContent = 'Keine Verwandten in der Datei hinterlegt.';
+    empty.textContent = t().noRelatives;
     root.append(empty);
   }
 
@@ -140,9 +141,9 @@ function focusCard(person: Person, relation: string | undefined): HTMLElement {
   if (relation) card.append(line('focus-relation', relation));
 
   if (person.nick && person.nick !== shortName(person)) {
-    card.append(line('focus-nick', `„${person.nick}“`));
+    card.append(line('focus-nick', lang() === 'de' ? `„${person.nick}“` : `“${person.nick}”`));
   }
-  if (person.maiden) card.append(line('focus-maiden', `geb. ${person.maiden}`));
+  if (person.maiden) card.append(line('focus-maiden', t().nee(person.maiden)));
 
   const dates: string[] = [];
   if (person.born) dates.push(`* ${longDate(person.born)}`);
@@ -159,17 +160,18 @@ function line(className: string, text: string): HTMLElement {
   return element;
 }
 
-/** What each of the four partnership states is called and coloured. */
-const RELATION: Record<UnionStatus, { label: string; badge: string; ended: boolean }> = {
-  married: { label: 'verheiratet', badge: 'badge-primary', ended: false },
-  together: { label: 'zusammen', badge: 'badge-secondary', ended: false },
-  divorced: { label: 'geschieden', badge: 'badge-error', ended: true },
-  separated: { label: 'getrennt', badge: 'badge-error', ended: true },
+/** How each of the four partnership states is coloured. */
+const RELATION: Record<UnionStatus, { badge: string; ended: boolean }> = {
+  married: { badge: 'badge-primary', ended: false },
+  together: { badge: 'badge-secondary', ended: false },
+  divorced: { badge: 'badge-error', ended: true },
+  separated: { badge: 'badge-error', ended: true },
 };
 
 function relationPill(union: Union): HTMLElement {
   const status = unionStatus(union);
-  const { label, badge, ended } = RELATION[status];
+  const { badge, ended } = RELATION[status];
+  const label = t().status[status];
   const pill = document.createElement('span');
   pill.className = `relation-pill badge badge-sm badge-soft ${badge}`;
   const from = year(unionStart(union));
@@ -178,8 +180,8 @@ function relationPill(union: Union): HTMLElement {
     pill.textContent = [from, to].filter(Boolean).join(' – ') || label;
     pill.title = `${label}${to ? ` ${to}` : ''}`;
   } else {
-    pill.textContent = from ? `seit ${from}` : label;
-    pill.title = `${label}${from ? ` seit ${from}` : ''}`;
+    pill.textContent = from ? t().since(from) : label;
+    pill.title = `${label}${from ? ` ${t().since(from)}` : ''}`;
   }
   return pill;
 }

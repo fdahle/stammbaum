@@ -4,6 +4,7 @@ import { photoUrl } from '../data';
 import { familyName, initials, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
 import { icon, weddingRings, RINGS } from '../ui/icons';
 import { unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
+import { t } from '../i18n';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MIN_SCALE = 0.12;
@@ -34,6 +35,8 @@ export class OverviewView {
   /** The tree plus the build stamp beneath it. */
   private readonly height: number;
   private readonly nodeElements = new Map<string, SVGGElement>();
+  private readonly fab: HTMLButtonElement;
+  private readonly stamp: SVGTextElement;
   private view: View = { k: 1, x: 0, y: 0 };
   private positioned = false;
   private highlighted: string | undefined;
@@ -55,9 +58,19 @@ export class OverviewView {
     this.svg.append(this.viewport);
     this.element.append(this.svg);
 
-    this.viewport.append(this.drawLinks(), this.drawNodes(), this.drawStamp());
+    this.stamp = this.drawStamp();
+    this.viewport.append(this.drawLinks(), this.drawNodes(), this.stamp);
     this.bindGestures();
-    this.element.append(this.buildFab());
+    this.fab = this.buildFab();
+    this.element.append(this.fab);
+    this.localize();
+  }
+
+  /** Puts the app's own words into the current language. */
+  localize(): void {
+    this.fab.title = t().fit;
+    this.fab.setAttribute('aria-label', t().fit);
+    this.stamp.textContent = buildStamp(__BUILD_TIME__, __FAMILY_COMMIT__);
   }
 
   /** Called whenever the view becomes visible. */
@@ -362,12 +375,10 @@ export class OverviewView {
 
   // ---- drawing ------------------------------------------------------------
 
-  private buildFab(): HTMLElement {
+  private buildFab(): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'fab-fit btn btn-primary btn-circle btn-lg shadow-lg';
-    button.title = 'Ganzen Stammbaum zeigen';
-    button.setAttribute('aria-label', 'Ganzen Stammbaum zeigen');
     button.append(icon('fit'));
     button.addEventListener('click', () => this.fit());
     return button;
@@ -380,7 +391,6 @@ export class OverviewView {
       x: this.layout.width / 2,
       y: this.layout.height + STAMP_SPACE - 10,
     });
-    text.textContent = buildStamp(__BUILD_TIME__, __FAMILY_COMMIT__);
     return text;
   }
 

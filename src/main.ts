@@ -2,11 +2,13 @@ import './styles/app.css';
 
 import { loadFamily } from './data';
 import { Family } from './family';
-import { OverviewView } from './views/overview';
-import { renderPerson } from './views/person';
-import { icon, iconButton, type IconName } from './ui/icons';
+import { LANGS, lang, setLang, t } from './i18n';
 import type { Person } from './parser/types';
 import { lifespan } from './ui/format';
+import { icon, iconButton, type IconName } from './ui/icons';
+import { readStored, writeStored } from './ui/storage';
+import { OverviewView } from './views/overview';
+import { renderPerson } from './views/person';
 
 /**
  * Three-way appearance switch. "system" leaves the choice to the OS: daisyUI's
@@ -14,10 +16,10 @@ import { lifespan } from './ui/format';
  * data-theme attribute is set.
  */
 const MODES = [
-  { id: 'system', label: 'Automatisch', icon: 'auto' },
-  { id: 'light', label: 'Hell', icon: 'sun' },
-  { id: 'dark', label: 'Dunkel', icon: 'moon' },
-] as const satisfies ReadonlyArray<{ id: string; label: string; icon: IconName }>;
+  { id: 'system', icon: 'auto' },
+  { id: 'light', icon: 'sun' },
+  { id: 'dark', icon: 'moon' },
+] as const satisfies ReadonlyArray<{ id: string; icon: IconName }>;
 
 type Mode = (typeof MODES)[number]['id'];
 
@@ -29,19 +31,25 @@ const searchInput = must<HTMLInputElement>('#search');
 const results = must<HTMLUListElement>('#results');
 const title = must<HTMLAnchorElement>('#family-title');
 
-const backButton = iconButton('back', 'Zurück zur Übersicht');
-const searchToggle = iconButton('search', 'Person suchen');
-const themeButton = iconButton('auto', 'Darstellung wechseln');
+const backButton = iconButton('back', '');
+const searchToggle = iconButton('search', '');
 backButton.id = 'back';
 searchToggle.id = 'search-toggle';
-themeButton.id = 'theme';
 searchToggle.classList.add('search-toggle');
 searchToggle.setAttribute('aria-pressed', 'false');
 backButton.hidden = true;
-actions.append(backButton, searchToggle, themeButton);
+
+const menu = document.createElement('details');
+menu.className = 'dropdown dropdown-end settings-menu';
+const menuButton = document.createElement('summary');
+menuButton.className = 'btn btn-ghost btn-circle';
+menuButton.append(icon('menu'));
+const menuPanel = document.createElement('div');
+menuPanel.className = 'dropdown-content settings-panel';
+menu.append(menuButton, menuPanel);
+actions.append(backButton, searchToggle, menu);
 
 must<HTMLElement>('#crest').append(icon('tree'));
-document.title = family.graph.title;
 title.textContent = family.graph.title;
 
 const overview = new OverviewView(family, (id) => {
@@ -156,16 +164,110 @@ searchInput.addEventListener('keydown', (event) => {
 
 document.addEventListener('pointerdown', (event) => {
   const target = event.target as Element | null;
+  if (!target?.closest('.settings-menu')) menu.open = false;
   if (target?.closest('.search') || target?.closest('.search-toggle')) return;
   closeResults();
   if (searchInput.value === '') closeSearch();
 });
 
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') menu.open = false;
+});
+
+// ---- settings -------------------------------------------------------------
+
+menu.addEventListener('toggle', () => {
+  if (menu.open) renderMenu();
+});
+
+function renderMenu(): void {
+  const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
+  menuPanel.replaceChildren(
+    group(
+      t().language,
+      segmented(
+        LANGS.map(({ id, label }) => ({ id, label })),
+        lang(),
+        (id) => {
+          setLang(id);
+          refresh();
+        },
+      ),
+    ),
+    group(
+      t().appearance,
+      segmented(
+        MODES.map(({ id, icon: glyph }) => ({ id, label: t().modes[id], icon: glyph })),
+        mode,
+        (id) => {
+          applyMode(id);
+          renderMenu();
+        },
+      ),
+    ),
+  );
+}
+
+function group(label: string, ...content: HTMLElement[]): HTMLElement {
+  const element = document.createElement('section');
+  element.className = 'settings-group';
+  const heading = document.createElement('h2');
+  heading.className = 'settings-label';
+  heading.textContent = label;
+  element.append(heading, ...content);
+  return element;
+}
+
+/** A row of buttons of which exactly one is pressed. */
+function segmented<T extends string>(
+  options: Array<{ id: T; label: string; icon?: IconName }>,
+  selected: T,
+  choose: (id: T) => void,
+): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'join w-full';
+  for (const option of options) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const active = option.id === selected;
+    button.className = `btn btn-sm join-item flex-1 ${active ? 'btn-primary' : 'btn-ghost bg-base-200'}`;
+    button.setAttribute('aria-pressed', String(active));
+    if (option.icon) button.append(icon(option.icon));
+    button.append(option.label);
+    button.addEventListener('click', () => choose(option.id));
+    row.append(button);
+  }
+  return row;
+}
+
+/** After the language changed: every word again. */
+function refresh(): void {
+  localize();
+  overview.localize();
+  route();
+  if (menu.open) renderMenu();
+}
+
+/** The words that live in index.html and the app bar rather than in a view. */
+function localize(): void {
+  document.documentElement.lang = lang();
+  document.querySelector('meta[name="description"]')?.setAttribute('content', t().description);
+  searchInput.placeholder = t().searchPlaceholder;
+  searchInput.setAttribute('aria-label', t().search);
+  for (const [element, text] of [
+    [backButton, t().back],
+    [searchToggle, t().search],
+    [menuButton, t().menu],
+  ] as const) {
+    element.title = text;
+    element.setAttribute('aria-label', text);
+  }
+}
+
 // ---- appearance -----------------------------------------------------------
 
 function applyMode(id: string): void {
   const mode = MODES.find((m) => m.id === id) ?? MODES[0];
-  const next = MODES[(MODES.findIndex((m) => m.id === mode.id) + 1) % MODES.length]!;
 
   // No attribute means "let daisyUI follow prefers-color-scheme".
   if (mode.id === 'system') delete document.documentElement.dataset.theme;
@@ -176,9 +278,6 @@ function applyMode(id: string): void {
   // and form controls in step wherever the page is embedded.
   document.documentElement.style.colorScheme = mode.id === 'system' ? 'light dark' : mode.id;
 
-  themeButton.replaceChildren(icon(mode.icon));
-  themeButton.title = `Darstellung: ${mode.label} — umschalten auf ${next.label}`;
-  themeButton.setAttribute('aria-label', themeButton.title);
   writeStored('stammbaum-mode', mode.id);
   paintThemeColor();
 }
@@ -210,12 +309,6 @@ function toHex(color: string): string | undefined {
   }
 }
 
-themeButton.addEventListener('click', () => {
-  const current = (readStored('stammbaum-mode') ?? 'system') as Mode;
-  const index = MODES.findIndex((m) => m.id === current);
-  applyMode(MODES[(index + 1) % MODES.length]!.id);
-});
-
 applyMode(readStored('stammbaum-mode') ?? 'system');
 // Following the system means reacting when it changes.
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintThemeColor);
@@ -227,9 +320,7 @@ function showGestureHint(): void {
   const touch = matchMedia('(pointer: coarse)').matches;
   const hint = document.createElement('div');
   hint.className = 'hint alert border-0 bg-neutral text-neutral-content shadow-lg';
-  hint.textContent = touch
-    ? 'Ziehen zum Bewegen · zwei Finger zum Zoomen · tippen für eine Person'
-    : 'Ziehen zum Bewegen · Mausrad zum Zoomen · Klick für eine Person';
+  hint.textContent = touch ? t().hintTouch : t().hintMouse;
   overview.element.append(hint);
   writeStored('stammbaum-hint', 'seen');
 
@@ -247,11 +338,11 @@ if (family.graph.warnings.length > 0) {
   const banner = document.createElement('div');
   banner.className = 'warnings alert alert-warning shadow-lg flex-col items-start gap-1';
   const heading = document.createElement('strong');
-  heading.textContent = `${family.graph.warnings.length} Hinweis(e) in family.md`;
+  heading.textContent = t().warnings(family.graph.warnings.length);
   const list = document.createElement('ul');
   for (const warning of family.graph.warnings.slice(0, 8)) {
     const item = document.createElement('li');
-    item.textContent = warning.line > 0 ? `Zeile ${warning.line}: ${warning.message}` : warning.message;
+    item.textContent = warning.line > 0 ? t().warningLine(warning.line, warning.message) : warning.message;
     list.append(item);
   }
   banner.append(heading, list);
@@ -259,23 +350,8 @@ if (family.graph.warnings.length > 0) {
   document.body.append(banner);
 }
 
+localize();
 route();
-
-function readStored(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Nothing to do — the hint will show again next time.
-  }
-}
 
 function must<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);

@@ -120,3 +120,40 @@ describe('me and sex in the file', () => {
     ]);
   });
 });
+
+describe('relation in English', () => {
+  const en = (from: string, to: string) => relation(family, from, to, 'en');
+
+  it('names ancestors, descendants and siblings', () => {
+    expect(en('max', 'vater')).toBe('Father');
+    expect(en('max', 'oma')).toBe('Grandmother');
+    expect(en('max', 'uropa')).toBe('Great-grandfather');
+    expect(en('uropa', 'max')).toBe('Great-grandson');
+    expect(en('max', 'halb')).toBe('Half-sister');
+  });
+
+  it('names aunts, nieces and cousins with degree and removal', () => {
+    expect(en('max', 'tante')).toBe('Aunt');
+    expect(en('nichte', 'max')).toBe('Uncle');
+    expect(en('max', 'cousine')).toBe('Cousin');
+    expect(en('kim', 'max')).toBe('Cousin once removed');
+    expect(en('kim', 'nichte')).toBe('Second cousin');
+    expect(en('max', 'kim')).toBe('Cousin once removed');
+  });
+
+  it('names partners and in-laws', () => {
+    expect(en('max', 'frau')).toBe('Wife');
+    expect(en('max', 'neue')).toBe('Stepmother');
+    expect(en('max', 'schwaegerin')).toBe('Sister-in-law');
+    expect(en('max', 'cousinmann')).toBe("Cousin's husband");
+    expect(en('max', 'ex')).toBe("Cousin's ex-husband");
+    expect(en('max', 'robin')).toBe("Kim's partner");
+    expect(en('max', 'sv')).toBe('Father-in-law');
+    expect(en('frau', 'tante')).toBe("Husband's aunt");
+  });
+
+  it('calls the reference person "Me"', () => {
+    expect(en('max', 'max')).toBe('Me');
+    expect(en('max', 'fremd')).toBeUndefined();
+  });
+});

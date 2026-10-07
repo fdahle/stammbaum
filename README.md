@@ -140,10 +140,17 @@ Notes:
 - Undeclared ids still render, and the app shows a dismissible list of hints
   about the file — a half-finished tree never breaks the page.
 
+## Language
+
+The menu switches between **Deutsch** and **English**; the first visit follows
+the browser's language. Everything the app says is translated, the relation
+words included. What the family file says — names and notes — is shown as
+written.
+
 ## Appearance
 
-The button in the app bar cycles **Automatisch → Hell → Dunkel**, and the choice
-is remembered. "Automatisch" follows the phone's own light/dark setting and
+The menu switches between **Automatisch**, **Hell** and **Dunkel**, and the
+choice is remembered. "Automatisch" follows the phone's own light/dark setting and
 switches with it; the two explicit modes override it. The phone's status bar
 colour follows along.
 

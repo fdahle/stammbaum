@@ -1,19 +1,21 @@
 import type { Family } from './family';
+import type { Lang } from './i18n';
 import { unionStatus, type Person, type UnionStatus } from './parser/types';
 import { shortName } from './ui/format';
 
 /**
- * What `to` is to `from`, in German: "Tante", "Cousine 2. Grades", "Mann der
- * Cousine". Blood relations are named from the nearest common ancestor; in-laws
- * are one partnership away from a blood relative. Anyone further out is
- * `undefined`.
+ * What `to` is to `from`: "Tante", "Cousine 2. Grades", "Mann der Cousine" —
+ * or "Aunt", "Second cousin", "Cousin's husband". Blood relations are named
+ * from the nearest common ancestor; in-laws are one partnership away from a
+ * blood relative. Anyone further out is `undefined`.
  */
-export function relation(family: Family, from: string, to: string): string | undefined {
+export function relation(family: Family, from: string, to: string, lang: Lang = 'de'): string | undefined {
   const target = family.person(to);
   if (!target) return undefined;
+  const words = LEXICONS[lang];
   const kin = blood(family, from, to);
-  if (kin) return say(bloodTerm(kin), target);
-  return partnerOfRelative(family, from, target) ?? relativeOfPartner(family, from, target);
+  if (kin) return say(words.blood(kin), target);
+  return partnerOfRelative(family, from, target, words) ?? relativeOfPartner(family, from, target, words);
 }
 
 // ---- blood ----------------------------------------------------------------
@@ -52,49 +54,34 @@ function ancestry(family: Family, id: string): Map<string, number> {
   return depth;
 }
 
-function bloodTerm({ up, down, half }: Blood): Term {
-  if (up === 0 && down === 0) return SELF;
-  if (down === 0) return prefixed(PARENT, greatPrefix(up - 1));
-  if (up === 0) return down === 1 ? CHILD : prefixed(GRANDCHILD, capitalize('ur'.repeat(down - 2)));
-  if (up === 1 && down === 1) return half ? prefixed(SIBLING, 'Halb') : SIBLING;
-  if (down === 1) return prefixed(UNCLE, greatPrefix(up - 2));
-  if (up === 1) return prefixed(NEPHEW, greatPrefix(down - 2));
-  const degree = Math.min(up, down) - 1;
-  const removed = Math.abs(up - down);
-  if (degree === 1 && removed === 0) return COUSIN;
-  // A cousin's child and a parent's cousin — the colloquial word for both.
-  if (degree === 1 && removed === 1) return prefixed(COUSIN, 'Groß');
-  return suffixed(COUSIN, ` ${degree}. Grades${removed > 0 ? `, ${removed}× entfernt` : ''}`);
-}
-
 // ---- in-laws --------------------------------------------------------------
 
 /** `to` is, or was, the partner of one of `from`'s blood relatives. */
-function partnerOfRelative(family: Family, from: string, to: Person): string | undefined {
+function partnerOfRelative(family: Family, from: string, to: Person, words: Lexicon): string | undefined {
   const link = closest(family.partnerships(to.id), (partner) => blood(family, from, partner.id));
   if (!link) return undefined;
   const { kin, partner: relative, status } = link;
-  if (kin.up === 0 && kin.down === 0) return say(status === 'married' ? SPOUSE : PARTNER[status], to);
+  if (kin.up === 0 && kin.down === 0) return say(status === 'married' ? words.spouse : words.partner[status], to);
   if (!ended(status)) {
-    if (kin.up === 1 && kin.down === 0) return say(STEP_PARENT, to);
-    if (kin.up === 0 && kin.down === 1) return say(CHILD_IN_LAW, to);
-    if (kin.up === 1 && kin.down === 1) return say(SIBLING_IN_LAW, to);
+    if (kin.up === 1 && kin.down === 0) return say(words.stepParent, to);
+    if (kin.up === 0 && kin.down === 1) return say(words.childInLaw, to);
+    if (kin.up === 1 && kin.down === 1) return say(words.siblingInLaw, to);
     // The aunt's husband is an uncle too.
-    if (kin.down === 1) return say(bloodTerm(kin), to);
+    if (kin.down === 1) return say(words.blood(kin), to);
   }
-  return `${say(PARTNER[status], to)} ${of(bloodTerm(kin), relative)}`;
+  return words.of(words.partner[status], to, words.blood(kin), relative);
 }
 
 /** `to` is a blood relative of `from`'s partner, current or former. */
-function relativeOfPartner(family: Family, from: string, to: Person): string | undefined {
+function relativeOfPartner(family: Family, from: string, to: Person, words: Lexicon): string | undefined {
   const link = closest(family.partnerships(from), (partner) => blood(family, partner.id, to.id));
   if (!link) return undefined;
   const { kin, partner, status } = link;
-  const ex = ended(status) ? 'Ex-' : '';
-  if (kin.up === 1 && kin.down === 0) return say(prefixed(PARENT_IN_LAW, ex), to);
-  if (kin.up === 1 && kin.down === 1) return say(prefixed(SIBLING_IN_LAW, ex), to);
-  if (kin.up === 0 && kin.down === 1 && !ex) return say(STEP_CHILD, to);
-  return `${say(bloodTerm(kin), to)} ${of(PARTNER[status], partner)}`;
+  const ex = ended(status);
+  if (kin.up === 1 && kin.down === 0) return say(ex ? words.ex(words.parentInLaw) : words.parentInLaw, to);
+  if (kin.up === 1 && kin.down === 1) return say(ex ? words.ex(words.siblingInLaw) : words.siblingInLaw, to);
+  if (kin.up === 0 && kin.down === 1 && !ex) return say(words.stepChild, to);
+  return words.of(words.blood(kin), to, words.partner[status], partner);
 }
 
 /** The partnership whose partner is the nearest blood relative. */
@@ -117,58 +104,32 @@ function ended(status: UnionStatus): boolean {
 
 // ---- words ----------------------------------------------------------------
 
-/** One word for a man and for a woman, plus a neutral one where German has it. */
+/** One word for a man and for a woman, plus a neutral one where the language has it. */
 interface Term {
   m: string;
   f: string;
   x?: string;
 }
 
-const SELF: Term = { m: 'Ich', f: 'Ich', x: 'Ich' };
-const PARENT: Term = { m: 'Vater', f: 'Mutter', x: 'Elternteil' };
-const CHILD: Term = { m: 'Sohn', f: 'Tochter', x: 'Kind' };
-const GRANDCHILD: Term = { m: 'Enkel', f: 'Enkelin', x: 'Enkelkind' };
-const SIBLING: Term = { m: 'Bruder', f: 'Schwester', x: 'Geschwister' };
-const UNCLE: Term = { m: 'Onkel', f: 'Tante' };
-const NEPHEW: Term = { m: 'Neffe', f: 'Nichte' };
-const COUSIN: Term = { m: 'Cousin', f: 'Cousine', x: 'Cousin(e)' };
-const SPOUSE: Term = { m: 'Ehemann', f: 'Ehefrau', x: 'Ehepartner(in)' };
-const STEP_PARENT: Term = { m: 'Stiefvater', f: 'Stiefmutter', x: 'Stiefelternteil' };
-const STEP_CHILD: Term = { m: 'Stiefsohn', f: 'Stieftochter', x: 'Stiefkind' };
-const PARENT_IN_LAW: Term = { m: 'Schwiegervater', f: 'Schwiegermutter', x: 'Schwiegerelternteil' };
-const CHILD_IN_LAW: Term = { m: 'Schwiegersohn', f: 'Schwiegertochter', x: 'Schwiegerkind' };
-const SIBLING_IN_LAW: Term = { m: 'Schwager', f: 'Schwägerin' };
-
-const PARTNER: Record<UnionStatus, Term> = {
-  married: { m: 'Mann', f: 'Frau', x: 'Ehepartner(in)' },
-  together: { m: 'Partner', f: 'Partnerin', x: 'Partner(in)' },
-  divorced: { m: 'Ex-Mann', f: 'Ex-Frau', x: 'Ex-Partner(in)' },
-  separated: { m: 'Ex-Partner', f: 'Ex-Partnerin', x: 'Ex-Partner(in)' },
-};
+/** Everything that differs between the languages; the structure above does not. */
+interface Lexicon {
+  blood(kin: Blood): Term;
+  spouse: Term;
+  partner: Record<UnionStatus, Term>;
+  stepParent: Term;
+  stepChild: Term;
+  parentInLaw: Term;
+  childInLaw: Term;
+  siblingInLaw: Term;
+  ex(term: Term): Term;
+  /** `term` (what `person` is) of `relative`, who is `relativeTerm`: "Mann der Cousine", "Cousin's husband". */
+  of(term: Term, person: Person, relativeTerm: Term, relative: Person): string;
+}
 
 function say(term: Term, person: Person): string {
   if (person.sex) return term[person.sex];
   // The break opportunity keeps "Großonkel/Großtante" inside a narrow tile.
   return term.x ?? `${term.m}/​${term.f}`;
-}
-
-/** "der Cousine", "des Onkels" — or "von Quin" when the file does not say which. */
-function of(term: Term, person: Person): string {
-  if (person.sex === 'f') return `der ${term.f}`;
-  if (person.sex === 'm') return `des ${genitive(term.m)}`;
-  return `von ${shortName(person)}`;
-}
-
-/** Inflects the first word: Onkel → Onkels, Neffe → Neffen, Mann → Mannes. */
-function genitive(phrase: string): string {
-  const [head = '', ...rest] = phrase.split(' ');
-  const inflected = head.endsWith('e') ? `${head}n` : /mann$/i.test(head) ? `${head}es` : `${head}s`;
-  return [inflected, ...rest].join(' ');
-}
-
-/** Groß, Urgroß, Ururgroß — one step per generation. */
-function greatPrefix(steps: number): string {
-  return steps === 0 ? '' : capitalize(`${'ur'.repeat(steps - 1)}groß`);
 }
 
 function prefixed(term: Term, prefix: string): Term {
@@ -191,3 +152,134 @@ function map(term: Term, change: (word: string) => string): Term {
 function capitalize(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
+
+// ---- German ---------------------------------------------------------------
+
+const DE = {
+  self: { m: 'Ich', f: 'Ich', x: 'Ich' },
+  parent: { m: 'Vater', f: 'Mutter', x: 'Elternteil' },
+  child: { m: 'Sohn', f: 'Tochter', x: 'Kind' },
+  grandchild: { m: 'Enkel', f: 'Enkelin', x: 'Enkelkind' },
+  sibling: { m: 'Bruder', f: 'Schwester', x: 'Geschwister' },
+  uncle: { m: 'Onkel', f: 'Tante' },
+  nephew: { m: 'Neffe', f: 'Nichte' },
+  cousin: { m: 'Cousin', f: 'Cousine', x: 'Cousin(e)' },
+} satisfies Record<string, Term>;
+
+/** Groß, Urgroß, Ururgroß — one step per generation. */
+function greatPrefix(steps: number): string {
+  return steps === 0 ? '' : capitalize(`${'ur'.repeat(steps - 1)}groß`);
+}
+
+/** "der Cousine", "des Onkels" — or "von Quin" when the file does not say which. */
+function genitivePhrase(term: Term, person: Person): string {
+  if (person.sex === 'f') return `der ${term.f}`;
+  if (person.sex === 'm') return `des ${genitive(term.m)}`;
+  return `von ${shortName(person)}`;
+}
+
+/** Inflects the first word: Onkel → Onkels, Neffe → Neffen, Mann → Mannes. */
+function genitive(phrase: string): string {
+  const [head = '', ...rest] = phrase.split(' ');
+  const inflected = head.endsWith('e') ? `${head}n` : /mann$/i.test(head) ? `${head}es` : `${head}s`;
+  return [inflected, ...rest].join(' ');
+}
+
+const GERMAN: Lexicon = {
+  blood({ up, down, half }) {
+    if (up === 0 && down === 0) return DE.self;
+    if (down === 0) return prefixed(DE.parent, greatPrefix(up - 1));
+    if (up === 0) return down === 1 ? DE.child : prefixed(DE.grandchild, capitalize('ur'.repeat(down - 2)));
+    if (up === 1 && down === 1) return half ? prefixed(DE.sibling, 'Halb') : DE.sibling;
+    if (down === 1) return prefixed(DE.uncle, greatPrefix(up - 2));
+    if (up === 1) return prefixed(DE.nephew, greatPrefix(down - 2));
+    const degree = Math.min(up, down) - 1;
+    const removed = Math.abs(up - down);
+    if (degree === 1 && removed === 0) return DE.cousin;
+    // A cousin's child and a parent's cousin — the colloquial word for both.
+    if (degree === 1 && removed === 1) return prefixed(DE.cousin, 'Groß');
+    return suffixed(DE.cousin, ` ${degree}. Grades${removed > 0 ? `, ${removed}× entfernt` : ''}`);
+  },
+  spouse: { m: 'Ehemann', f: 'Ehefrau', x: 'Ehepartner(in)' },
+  partner: {
+    married: { m: 'Mann', f: 'Frau', x: 'Ehepartner(in)' },
+    together: { m: 'Partner', f: 'Partnerin', x: 'Partner(in)' },
+    divorced: { m: 'Ex-Mann', f: 'Ex-Frau', x: 'Ex-Partner(in)' },
+    separated: { m: 'Ex-Partner', f: 'Ex-Partnerin', x: 'Ex-Partner(in)' },
+  },
+  stepParent: { m: 'Stiefvater', f: 'Stiefmutter', x: 'Stiefelternteil' },
+  stepChild: { m: 'Stiefsohn', f: 'Stieftochter', x: 'Stiefkind' },
+  parentInLaw: { m: 'Schwiegervater', f: 'Schwiegermutter', x: 'Schwiegerelternteil' },
+  childInLaw: { m: 'Schwiegersohn', f: 'Schwiegertochter', x: 'Schwiegerkind' },
+  siblingInLaw: { m: 'Schwager', f: 'Schwägerin' },
+  ex: (term) => prefixed(term, 'Ex-'),
+  of: (term, person, relativeTerm, relative) => `${say(term, person)} ${genitivePhrase(relativeTerm, relative)}`,
+};
+
+// ---- English --------------------------------------------------------------
+
+const EN = {
+  self: { m: 'Me', f: 'Me', x: 'Me' },
+  parent: { m: 'Father', f: 'Mother', x: 'Parent' },
+  child: { m: 'Son', f: 'Daughter', x: 'Child' },
+  sibling: { m: 'Brother', f: 'Sister', x: 'Sibling' },
+  uncle: { m: 'Uncle', f: 'Aunt' },
+  nephew: { m: 'Nephew', f: 'Niece' },
+  cousin: { m: 'Cousin', f: 'Cousin', x: 'Cousin' },
+} satisfies Record<string, Term>;
+
+/** grand, great-grand, great-great-grand — for grandparents and grandchildren. */
+function grand(steps: number): string {
+  return steps === 0 ? '' : `${'great-'.repeat(steps - 1)}grand`;
+}
+
+/** great-, great-great- — for uncles and nephews, which skip the "grand". */
+function great(steps: number): string {
+  return 'great-'.repeat(steps);
+}
+
+function englishPrefixed(term: Term, prefix: string): Term {
+  return prefix === '' ? term : map(term, (word) => capitalize(prefix + word.toLowerCase()));
+}
+
+const ORDINALS = ['', 'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'];
+const TIMES = ['', 'once', 'twice', 'three times', 'four times'];
+
+/** "Cousin's husband", "Husband's aunt" — or "Kim's partner" when the file does not say which. */
+function possessive(term: Term, person: Person): string {
+  const owner = person.sex ? term[person.sex] : shortName(person);
+  return `${owner}${owner.endsWith('s') ? "'" : "'s"}`;
+}
+
+const ENGLISH: Lexicon = {
+  blood({ up, down, half }) {
+    if (up === 0 && down === 0) return EN.self;
+    if (down === 0) return englishPrefixed(EN.parent, grand(up - 1));
+    if (up === 0) return englishPrefixed(EN.child, grand(down - 1));
+    if (up === 1 && down === 1) return half ? englishPrefixed(EN.sibling, 'half-') : EN.sibling;
+    if (down === 1) return englishPrefixed(EN.uncle, great(up - 2));
+    if (up === 1) return englishPrefixed(EN.nephew, great(down - 2));
+    const degree = Math.min(up, down) - 1;
+    const removed = Math.abs(up - down);
+    const ordinal = degree === 1 ? '' : `${ORDINALS[degree] ?? `${degree}th`} `;
+    const distance = removed === 0 ? '' : ` ${TIMES[removed] ?? `${removed} times`} removed`;
+    return map(EN.cousin, (word) => capitalize(`${ordinal}${ordinal ? word.toLowerCase() : word}${distance}`));
+  },
+  spouse: { m: 'Husband', f: 'Wife', x: 'Spouse' },
+  partner: {
+    married: { m: 'Husband', f: 'Wife', x: 'Spouse' },
+    together: { m: 'Partner', f: 'Partner', x: 'Partner' },
+    divorced: { m: 'Ex-husband', f: 'Ex-wife', x: 'Ex-spouse' },
+    separated: { m: 'Ex-partner', f: 'Ex-partner', x: 'Ex-partner' },
+  },
+  stepParent: { m: 'Stepfather', f: 'Stepmother', x: 'Step-parent' },
+  stepChild: { m: 'Stepson', f: 'Stepdaughter', x: 'Stepchild' },
+  parentInLaw: { m: 'Father-in-law', f: 'Mother-in-law', x: 'Parent-in-law' },
+  childInLaw: { m: 'Son-in-law', f: 'Daughter-in-law', x: 'Child-in-law' },
+  siblingInLaw: { m: 'Brother-in-law', f: 'Sister-in-law', x: 'Sibling-in-law' },
+  ex: (term) => map(term, (word) => `Ex-${word.toLowerCase()}`),
+  of: (term, person, relativeTerm, relative) =>
+    `${possessive(relativeTerm, relative)} ${say(term, person).toLowerCase()}`,
+};
+
+const LEXICONS: Record<Lang, Lexicon> = { de: GERMAN, en: ENGLISH };
