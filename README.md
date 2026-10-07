@@ -2,11 +2,22 @@
 
 A pocket "who is who" for family gatherings. Built mobile first — the phone in
 your pocket at the party is the primary target, the desktop layout is the
-enhancement. Two screens, one markdown file:
+enhancement. Three screens, one markdown file:
 
-- **Übersicht** — the whole tree as a map you drag, pinch and flick around.
+- **Übersicht** — the whole tree as a map you drag, pinch and flick around; or
+  just one person's ancestors (`#/up/<id>`) or descendants (`#/down/<id>`).
 - **Person** — one person with their first-degree relatives only: parents on
-  top, partners beside (below, on a phone), children underneath.
+  top, partners beside (below, on a phone), children underneath. The card
+  says how old they are (or became), where they were born and live, what they
+  do, and has their photos.
+- **Verwandtschaft** — how any two people are related (`#/r/<a>/<b>`): the word
+  for it in both directions, and the chain of parents, children and partners
+  between them, which the tree can then highlight (`#/path/<a>/<b>`).
+
+Everyone is captioned with what they are to whoever is looking — *Tante*,
+*Cousine 2. Grades* — and search finds people by name, place, job, year of
+birth or by that relation ("tante", "cousin"). The app speaks German and
+English; the menu switches between them.
 
 The family lives in `data/family.md`, written in a mermaid-flavoured DSL, so the
 tree is edited like text and reviewed like code. That folder is private and
@@ -134,7 +145,8 @@ Notes:
   Grades*, *Schwager*, *Mann der Cousine*, or in English *Aunt*, *Second
   cousin*, *Cousin's husband*. `sex=m` or `sex=f` (`w` works too) picks the
   gendered word; without it the caption names both (*Onkel/Tante*). People who
-  are neither blood relatives nor one partnership away from one get no caption.
+  are neither blood relatives nor one partnership away from one get no caption
+  — the relationship screen still shows how they are connected.
 - With a full `born` date the card shows the age — *37 Jahre*, or *wurde 80
   Jahre alt* with a `died` date too — and a note on the birthday itself. With
   only a year it says *etwa*. A lasting partnership says how long it has
@@ -217,7 +229,7 @@ second palette existing anywhere.
 Vite + TypeScript with Tailwind CSS 4 and daisyUI 5 for the styling and the
 theme system; no UI framework and no runtime JavaScript dependencies. Tailwind
 and daisyUI are build-time only, so the offline file still fetches nothing —
-about 36 kB of JavaScript and 62 kB of CSS, both tree-shaken to what the app
+about 67 kB of JavaScript and 88 kB of CSS, both tree-shaken to what the app
 actually uses. Icons are inline SVG, so there is no icon font either.
 
 The overview is one SVG with a transform for pan and zoom, driven by Pointer
@@ -233,13 +245,18 @@ data/                   your family — ignored here, a private repo of its own
 sample/family.md        the made-up sample family, and the format in prose
 sample/photos/          its placeholder portraits
 src/parser/             markdown → { people, unions, warnings }
-src/family.ts           derived lookups: parents, partnerships, broods, search
+src/family.ts           derived lookups: parents, broods, search, subtrees, paths
+src/kinship.ts          what one person is to another, in German and English
+src/i18n.ts             the app's own words, German and English
 src/layout/layout.ts    generations, tidy horizontal placement, refinement sweep
 src/ui/icons.ts         inline stroked SVG icons
+src/ui/picker.ts        the searchable "who?" sheet
+src/ui/lightbox.ts      photos full screen
 src/views/overview.ts   the gesture-driven SVG tree
 src/views/person.ts     one person and their first-degree relatives
+src/views/relation.ts   how two people are related, and the path between them
 src/styles/app.css      Tailwind + daisyUI setup and every component rule
-tests/                  parser, family and layout tests (vitest)
+tests/                  parser, family, kinship, age and layout tests (vitest)
 ```
 
 The layout is a two-stage tidy tree: a recursive walk places each couple above
