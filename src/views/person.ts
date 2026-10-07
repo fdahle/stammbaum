@@ -10,7 +10,7 @@ import {
   type UnionStatus,
 } from '../parser/types';
 import { bubble, tile } from '../ui/tile';
-import { longDate, shortName, year } from '../ui/format';
+import { ageOf, hasBirthday, longDate, parseDate, shortName, today, year, yearsBetween } from '../ui/format';
 import { weddingRings, RINGS } from '../ui/icons';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -145,10 +145,18 @@ function focusCard(person: Person, relation: string | undefined): HTMLElement {
   }
   if (person.maiden) card.append(line('focus-maiden', t().nee(person.maiden)));
 
+  const now = today();
   const dates: string[] = [];
   if (person.born) dates.push(`* ${longDate(person.born)}`);
   if (person.died) dates.push(`† ${longDate(person.died)}`);
   if (dates.length > 0) card.append(line('focus-dates', dates.join('   ')));
+
+  const age = ageOf(person, now);
+  if (age) card.append(line('focus-age', age.final ? t().ageAtDeath(age.years, age.approx) : t().age(age.years, age.approx)));
+  if (hasBirthday(person, now)) {
+    const badge = line('focus-birthday badge badge-accent', t().birthdayToday);
+    card.append(badge);
+  }
   if (person.note) card.append(line('focus-note', person.note));
   return card;
 }
@@ -180,7 +188,11 @@ function relationPill(union: Union): HTMLElement {
     pill.textContent = [from, to].filter(Boolean).join(' – ') || label;
     pill.title = `${label}${to ? ` ${to}` : ''}`;
   } else {
-    pill.textContent = from ? t().since(from) : label;
+    // A lasting partnership also says how long it has lasted.
+    const start = parseDate(unionStart(union));
+    const lasted = start && yearsBetween(start, today());
+    const duration = lasted && lasted.years > 0 ? ` · ${t().yearsTogether(lasted.years)}` : '';
+    pill.textContent = from ? `${t().since(from)}${duration}` : label;
     pill.title = `${label}${from ? ` ${t().since(from)}` : ''}`;
   }
   return pill;

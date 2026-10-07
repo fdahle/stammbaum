@@ -53,7 +53,65 @@ export function buildStamp(builtAt: string, commit: string): string {
   return t().built(when, commit);
 }
 
-//** A stable pastel per person, used when there is no photo. */
+// ---- ages -----------------------------------------------------------------
+
+/** A date as far as the file knows it: the year always, month and day maybe. */
+export interface DateParts {
+  y: number;
+  m?: number;
+  d?: number;
+}
+
+/** `1956`, `1956-04`, `1956-04-02` — anything else is not a date to count with. */
+export function parseDate(date: string | undefined): DateParts | undefined {
+  const match = date ? /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(date) : null;
+  if (!match) return undefined;
+  const [, y, m, d] = match;
+  return { y: Number(y), ...(m ? { m: Number(m) } : {}), ...(d ? { d: Number(d) } : {}) };
+}
+
+export function today(now = new Date()): DateParts {
+  return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() };
+}
+
+/**
+ * Whole years from `from` to `until`. With only a year on either side the
+ * birthday may or may not have passed yet, so the answer is marked `approx`.
+ */
+export function yearsBetween(from: DateParts, until: DateParts): { years: number; approx: boolean } | undefined {
+  let years = until.y - from.y;
+  let approx = false;
+  if (from.m === undefined || until.m === undefined) approx = true;
+  else if (until.m < from.m) years--;
+  else if (until.m === from.m) {
+    if (from.d === undefined || until.d === undefined) approx = true;
+    else if (until.d < from.d) years--;
+  }
+  return years < 0 ? undefined : { years, approx };
+}
+
+/** Nobody in a family file is that old — a death date is simply missing. */
+const OLDEST = 110;
+
+/** How old someone is, or was when they died. */
+export function ageOf(person: Person, now: DateParts): { years: number; approx: boolean; final: boolean } | undefined {
+  const born = parseDate(person.born);
+  if (!born) return undefined;
+  if (person.died !== undefined) {
+    const died = parseDate(person.died);
+    const age = died && yearsBetween(born, died);
+    return age ? { ...age, final: true } : undefined;
+  }
+  const age = yearsBetween(born, now);
+  return age && age.years <= OLDEST ? { ...age, final: false } : undefined;
+}
+
+export function hasBirthday(person: Person, now: DateParts): boolean {
+  const born = parseDate(person.born);
+  return person.died === undefined && !!born && born.m === now.m && born.d === now.d;
+}
+
+/** A stable pastel per person, used when there is no photo. */
 export function avatarHue(id: string): number {
   let hash = 0;
   for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) % 360;

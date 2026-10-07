@@ -11,6 +11,8 @@ export const LANGS: ReadonlyArray<{ id: Lang; label: string }> = [
   { id: 'en', label: 'English' },
 ];
 
+const approx = (prefix: string, value: number, is: boolean) => `${is ? prefix : ''}${value}`;
+
 const de = {
   locale: 'de-DE',
   months: [
@@ -51,6 +53,11 @@ const de = {
     separated: 'getrennt',
   } satisfies Record<UnionStatus, string>,
   since: (year: string) => `seit ${year}`,
+  /** How long a lasting partnership has gone on, inside its pill. */
+  yearsTogether: (years: number) => `${years} J.`,
+  age: (years: number, isApprox: boolean) => `${approx('etwa ', years, isApprox)} Jahre`,
+  ageAtDeath: (years: number, isApprox: boolean) => `wurde ${approx('etwa ', years, isApprox)} Jahre alt`,
+  birthdayToday: 'Hat heute Geburtstag!',
 };
 
 type Dict = typeof de;
@@ -93,6 +100,10 @@ const en: Dict = {
     separated: 'separated',
   },
   since: (year) => `since ${year}`,
+  yearsTogether: (years) => `${years} y`,
+  age: (years, isApprox) => `${approx('about ', years, isApprox)} years old`,
+  ageAtDeath: (years, isApprox) => `died aged ${approx('about ', years, isApprox)}`,
+  birthdayToday: 'Birthday today!',
 };
 
 const DICTS: Record<Lang, Dict> = { de, en };

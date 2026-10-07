@@ -133,6 +133,10 @@ Notes:
   Cousine*. `sex=m` or `sex=f` (`w` works too) picks the gendered word; without
   it the caption names both (*Onkel/Tante*). People who are neither blood
   relatives nor one partnership away from one get no caption.
+- With a full `born` date the card shows the age — *37 Jahre*, or *wurde 80
+  Jahre alt* with a `died` date too — and a note on the birthday itself. With
+  only a year it says *etwa*. A lasting partnership says how long it has
+  lasted: *seit 2001 · 25 J.*
 - Statements about one partnership may be split across lines and written in
   either partner order; they merge.
 - Photos are file names inside the `photos/` folder next to `family.md`. Anyone
