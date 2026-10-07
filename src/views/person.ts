@@ -207,12 +207,12 @@ function focusCard(
     card.append(gallery);
   }
 
-  card.append(actions(person, context));
+  card.append(actions(family, person, context));
   return card;
 }
 
 /** What can be done from here: other views of this person and their family. */
-function actions(person: Person, context: PersonContext): HTMLElement {
+function actions(family: Family, person: Person, context: PersonContext): HTMLElement {
   const row = document.createElement('div');
   row.className = 'focus-actions';
   // A link where there is a place to go, a button where something happens.
@@ -232,13 +232,14 @@ function actions(person: Person, context: PersonContext): HTMLElement {
     element.append(icon(iconName), label);
     row.append(element);
   };
-
   const id = encodeURIComponent(person.id);
 
   if (context.viewer && context.viewer !== person.id) {
     add('link', t().howAreWeRelated, `#/r/${encodeURIComponent(context.viewer)}/${id}`);
   }
   add('link', t().relatedTo, () => context.pickRelative(person));
+  if (family.parents(person.id).length > 0) add('up', t().ancestors, `#/up/${id}`);
+  if (family.children(person.id).length > 0) add('down', t().descendants, `#/down/${id}`);
   if (context.viewer !== person.id) add('me', t().thisIsMe, () => context.setViewer(person.id));
   return row;
 }

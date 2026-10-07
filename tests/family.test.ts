@@ -89,3 +89,21 @@ describe('paths', () => {
     expect(family.path('mia', 'nobody')).toBeUndefined();
   });
 });
+
+describe('subtrees', () => {
+  it('keeps only the ancestors, and the partnerships between them', () => {
+    const graph = family.ancestorsGraph('nina');
+    expect([...graph.people.keys()].sort()).toEqual(['elisabeth', 'heinrich', 'ingrid', 'klaus', 'nina', 'sabine', 'werner']);
+    expect(graph.unions.map((u) => [u.partners, u.children])).toEqual([
+      [['heinrich', 'elisabeth'], ['klaus']],
+      [['werner', 'ingrid'], ['sabine']],
+      [['klaus', 'sabine'], ['nina']],
+    ]);
+  });
+
+  it("keeps the descendants and their partners, but not the partners' other families", () => {
+    const graph = family.descendantsGraph('klaus');
+    expect([...graph.people.keys()].sort()).toEqual(['ben', 'carmen', 'jonas', 'klaus', 'luca', 'mia', 'nina', 'sabine', 'tim']);
+    expect(new Family(graph).children('klaus').map((p) => p.id)).toEqual(['nina', 'jonas', 'luca']);
+  });
+});

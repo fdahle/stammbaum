@@ -108,6 +108,45 @@ export class Family {
       .map((hit) => hit.person);
   }
 
+  // ---- subtrees -----------------------------------------------------------
+
+  /** `id`, everyone above them, and the partnerships those people form. */
+  ancestorsGraph(id: string): FamilyGraph {
+    const ids = new Set([id]);
+    for (const current of ids) for (const parent of this.parents(current)) ids.add(parent.id);
+    return this.subgraph(ids, (union) => union.children.some((c) => ids.has(c)));
+  }
+
+  /** `id`, everyone below them, and each of their partners. */
+  descendantsGraph(id: string): FamilyGraph {
+    const blood = new Set([id]);
+    for (const current of blood) for (const child of this.children(current)) blood.add(child.id);
+    const ids = new Set(blood);
+    for (const current of blood) {
+      for (const { partner } of this.partnerships(current)) if (partner) ids.add(partner.id);
+    }
+    return this.subgraph(ids, (union) => union.partners.some((p) => blood.has(p)));
+  }
+
+  private subgraph(ids: Set<string>, keep: (union: Union) => boolean): FamilyGraph {
+    const people = new Map([...ids].flatMap((id) => {
+      const person = this.person(id);
+      return person ? [[id, person] as const] : [];
+    }));
+    const unions = this.graph.unions.filter(keep).map((union) => ({
+      ...union,
+      partners: union.partners.filter((p) => ids.has(p)),
+      children: union.children.filter((c) => ids.has(c)),
+    }));
+    return {
+      title: this.graph.title,
+      ...(this.graph.me && ids.has(this.graph.me) ? { me: this.graph.me } : {}),
+      people,
+      unions: unions.filter((union) => union.partners.length > 0),
+      warnings: [],
+    };
+  }
+
   // ---- paths --------------------------------------------------------------
 
   /**
@@ -153,7 +192,6 @@ export class Family {
   }
 }
 
-
 /** What a person can be found by, best match first. */
 function fields(person: Person): Array<string | undefined> {
   return [
@@ -184,7 +222,7 @@ function score(haystacks: string[], needle: string): number {
 }
 
 function normalise(value: string): string {
-  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  return value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
 function isPerson(person: Person | undefined): person is Person {

@@ -142,10 +142,10 @@ async function findRelation(): Promise<void> {
 
 type Route =
   | { kind: 'tree' }
-  | { kind: 'person'; person: Person }
+  | { kind: 'up' | 'down' | 'person'; person: Person }
   | { kind: 'relation' | 'path'; a: Person; b: Person };
 
-/** `#/`, `#/p/klaus`, `#/r/jonas/felix`, `#/path/jonas/felix`. */
+/** `#/`, `#/p/klaus`, `#/up/klaus`, `#/down/klaus`, `#/r/jonas/felix`, `#/path/jonas/felix`. */
 function parseRoute(hash: string): Route | undefined {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const people = parts.slice(1).map((part) => {
@@ -159,7 +159,9 @@ function parseRoute(hash: string): Route | undefined {
   if (kind === undefined) return { kind: 'tree' };
   if (people.some((p) => !p)) return undefined;
   const [a, b] = people as Person[];
-  if (kind === 'p' && a && !b) return { kind: 'person', person: a };
+  if ((kind === 'p' || kind === 'up' || kind === 'down') && a && !b) {
+    return { kind: kind === 'p' ? 'person' : kind, person: a };
+  }
   if ((kind === 'r' || kind === 'path') && a && b && people.length === 2) {
     return { kind: kind === 'r' ? 'relation' : 'path', a, b };
   }
@@ -167,11 +169,24 @@ function parseRoute(hash: string): Route | undefined {
 }
 
 const tree = new OverviewView(family, openFromTree);
+/** Ancestor and descendant trees, built the first time they are asked for. */
+const subtrees = new Map<string, OverviewView>();
 /** The tree on screen, if a tree is on screen. */
 let shownTree: OverviewView | undefined;
 
 function openFromTree(id: string): void {
   location.hash = `#/p/${encodeURIComponent(id)}`;
+}
+
+function subtree(kind: 'up' | 'down', person: Person): OverviewView {
+  const key = `${kind}/${person.id}`;
+  let overview = subtrees.get(key);
+  if (!overview) {
+    const graph = kind === 'up' ? family.ancestorsGraph(person.id) : family.descendantsGraph(person.id);
+    overview = new OverviewView(new Family(graph), openFromTree);
+    subtrees.set(key, overview);
+  }
+  return overview;
 }
 
 function render(): void {
@@ -218,6 +233,14 @@ function render(): void {
       showTree(tree, `${shortName(a)} ↔ ${shortName(b)}`, relationRoute(a, b));
       tree.emphasize(family.path(a.id, b.id));
       document.title = `${shortName(a)} ↔ ${shortName(b)} — ${family.graph.title}`;
+      return;
+    }
+    case 'up':
+    case 'down': {
+      const { person } = route;
+      const label = route.kind === 'up' ? t().ancestorsOf(shortName(person)) : t().descendantsOf(shortName(person));
+      showTree(subtree(route.kind, person), label, `#/p/${encodeURIComponent(person.id)}`);
+      document.title = `${label} — ${family.graph.title}`;
       return;
     }
   }
@@ -439,6 +462,7 @@ function refresh(): void {
   captions.clear();
   localize();
   tree.localize();
+  for (const overview of subtrees.values()) overview.localize();
   render();
   if (menu.open) renderMenu();
 }

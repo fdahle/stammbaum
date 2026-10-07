@@ -50,6 +50,8 @@ const de = {
   noMatches: 'Niemand gefunden.',
 
   fit: 'Ganzen Stammbaum zeigen',
+  ancestorsOf: (name: string) => `Vorfahren von ${name}`,
+  descendantsOf: (name: string) => `Nachkommen von ${name}`,
 
   parents: 'Eltern',
   child: 'Kind',
@@ -75,6 +77,8 @@ const de = {
   photo: (n: number, of: number) => `Foto ${n} von ${of}`,
   previousPhoto: 'Voriges Foto',
   nextPhoto: 'Nächstes Foto',
+  ancestors: 'Vorfahren',
+  descendants: 'Nachkommen',
   relatedTo: 'Verwandt mit …',
   howAreWeRelated: 'Wie sind wir verwandt?',
   thisIsMe: 'Das bin ich',
@@ -127,6 +131,8 @@ const en: Dict = {
   noMatches: 'Nobody found.',
 
   fit: 'Show the whole tree',
+  ancestorsOf: (name) => `Ancestors of ${name}`,
+  descendantsOf: (name) => `Descendants of ${name}`,
 
   parents: 'Parents',
   child: 'Child',
@@ -151,6 +157,8 @@ const en: Dict = {
   photo: (n, of) => `Photo ${n} of ${of}`,
   previousPhoto: 'Previous photo',
   nextPhoto: 'Next photo',
+  ancestors: 'Ancestors',
+  descendants: 'Descendants',
   relatedTo: 'Related to …',
   howAreWeRelated: 'How are we related?',
   thisIsMe: 'This is me',
