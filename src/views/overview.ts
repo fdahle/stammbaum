@@ -78,6 +78,36 @@ export class OverviewView {
     for (const [nodeId, element] of this.nodeElements) element.classList.toggle('is-me', nodeId === id);
   }
 
+  /**
+   * Fades everyone but `ids` and brings them into view — a path between two
+   * people, say. `undefined` shows the whole tree evenly again.
+   */
+  emphasize(ids: string[] | undefined): void {
+    const keep = new Set(ids ?? []);
+    this.svg.classList.toggle('has-emphasis', keep.size > 0);
+    for (const [id, element] of this.nodeElements) element.classList.toggle('is-emphasized', keep.has(id));
+    if (keep.size > 0) this.fitTo([...keep]);
+  }
+
+  /** Zooms to the smallest view that shows all of `ids`. */
+  private fitTo(ids: string[]): void {
+    const nodes = ids.map((id) => this.layout.nodes.get(id)).filter((n): n is NodeBox => !!n);
+    const box = this.svg.getBoundingClientRect();
+    if (nodes.length === 0 || box.width === 0) return;
+    const half = METRICS.nodeWidth / 2;
+    const left = Math.min(...nodes.map((n) => n.x)) - half;
+    const right = Math.max(...nodes.map((n) => n.x)) + half;
+    const top = Math.min(...nodes.map((n) => n.y)) - METRICS.bubbleRadius - 12;
+    const bottom = Math.max(...nodes.map((n) => n.y)) + METRICS.bubbleRadius + 60;
+    const k = clamp(Math.min(box.width / (right - left + 32), box.height / (bottom - top + 32)), MIN_SCALE, 1.1);
+    this.positioned = true;
+    this.animateTo({
+      k,
+      x: box.width / 2 - ((left + right) / 2) * k,
+      y: box.height / 2 - ((top + bottom) / 2) * k,
+    });
+  }
+
   /** Called whenever the view becomes visible. */
   activate(): void {
     if (this.positioned) this.apply();
@@ -118,6 +148,11 @@ export class OverviewView {
     this.positioned = true;
     if (animate) this.animateTo(target);
     else this.set(target);
+  }
+
+  /** Whether this tree shows `id` at all — an ancestor tree leaves most people out. */
+  has(id: string): boolean {
+    return this.layout.nodes.has(id);
   }
 
   /** Centres one bubble and marks it, used by search. */

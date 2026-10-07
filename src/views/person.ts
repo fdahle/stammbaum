@@ -20,6 +20,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export interface PersonContext {
   /** Who is looking: everyone is captioned with what they are to this person. */
   viewer: string | undefined;
+  /** Asks who to compare `person` with, then shows how the two are related. */
+  pickRelative(person: Person): void;
   setViewer(id: string): void;
 }
 
@@ -231,6 +233,12 @@ function actions(person: Person, context: PersonContext): HTMLElement {
     row.append(element);
   };
 
+  const id = encodeURIComponent(person.id);
+
+  if (context.viewer && context.viewer !== person.id) {
+    add('link', t().howAreWeRelated, `#/r/${encodeURIComponent(context.viewer)}/${id}`);
+  }
+  add('link', t().relatedTo, () => context.pickRelative(person));
   if (context.viewer !== person.id) add('me', t().thisIsMe, () => context.setViewer(person.id));
   return row;
 }

@@ -5,13 +5,14 @@ import { Family } from './family';
 import { LANGS, lang, setLang, t } from './i18n';
 import { relation } from './kinship';
 import type { Person } from './parser/types';
-import { lifespan } from './ui/format';
+import { lifespan, shortName } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
 import { pickPerson } from './ui/picker';
 import { readStored, writeStored } from './ui/storage';
 import { bubble } from './ui/tile';
 import { OverviewView } from './views/overview';
 import { renderPerson } from './views/person';
+import { renderRelation, route as relationRoute } from './views/relation';
 
 /**
  * Three-way appearance switch. "system" leaves the choice to the OS: daisyUI's
@@ -119,36 +120,134 @@ async function chooseViewer(): Promise<void> {
   if (chosen !== undefined) setViewer(chosen ? chosen.id : null);
 }
 
-const overview = new OverviewView(family, (id) => {
-  location.hash = `#/p/${encodeURIComponent(id)}`;
-});
+/** Asks who to compare `person` with, then shows how the two are related. */
+async function pickRelative(person: Person): Promise<void> {
+  const other = await pickPerson(family, {
+    title: t().pickOther(shortName(person)),
+    caption,
+    extra: relationWords,
+    exclude: person.id,
+  });
+  if (other) location.hash = relationRoute(person, other);
+}
+
+async function findRelation(): Promise<void> {
+  menu.open = false;
+  const me = viewer();
+  const first = (me && family.person(me)) || (await pickPerson(family, { title: t().pickFirst, caption, extra: relationWords }));
+  if (first) await pickRelative(first);
+}
 
 // ---- routing --------------------------------------------------------------
 
-function route(): void {
-  const match = /^#\/p\/(.+)$/.exec(location.hash);
-  const person = match ? family.person(decodeURIComponent(match[1]!)) : undefined;
+type Route =
+  | { kind: 'tree' }
+  | { kind: 'person'; person: Person }
+  | { kind: 'relation' | 'path'; a: Person; b: Person };
+
+/** `#/`, `#/p/klaus`, `#/r/jonas/felix`, `#/path/jonas/felix`. */
+function parseRoute(hash: string): Route | undefined {
+  const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const people = parts.slice(1).map((part) => {
+    try {
+      return family.person(decodeURIComponent(part));
+    } catch {
+      return undefined;
+    }
+  });
+  const [kind] = parts;
+  if (kind === undefined) return { kind: 'tree' };
+  if (people.some((p) => !p)) return undefined;
+  const [a, b] = people as Person[];
+  if (kind === 'p' && a && !b) return { kind: 'person', person: a };
+  if ((kind === 'r' || kind === 'path') && a && b && people.length === 2) {
+    return { kind: kind === 'r' ? 'relation' : 'path', a, b };
+  }
+  return undefined;
+}
+
+const tree = new OverviewView(family, openFromTree);
+/** The tree on screen, if a tree is on screen. */
+let shownTree: OverviewView | undefined;
+
+function openFromTree(id: string): void {
+  location.hash = `#/p/${encodeURIComponent(id)}`;
+}
+
+function render(): void {
   closeResults();
   closeSearch();
-
-  if (person) {
-    view.replaceChildren(renderPerson(family, person, { viewer: viewer(), setViewer }));
-    view.scrollTop = 0;
-    backButton.hidden = false;
-    document.title = `${person.name} — ${family.graph.title}`;
+  const route = parseRoute(location.hash);
+  if (!route) {
+    location.replace('#/');
     return;
   }
-  if (match) location.replace('#/');
+  backButton.hidden = route.kind === 'tree';
+  shownTree = undefined;
 
+  switch (route.kind) {
+    case 'person': {
+      const { person } = route;
+      view.replaceChildren(renderPerson(family, person, { viewer: viewer(), pickRelative, setViewer }));
+      view.scrollTop = 0;
+      document.title = `${person.name} — ${family.graph.title}`;
+      return;
+    }
+    case 'relation': {
+      const { a, b } = route;
+      view.replaceChildren(
+        renderRelation(family, a, b, {
+          change: async (which) => {
+            const keep = which === 'a' ? b : a;
+            const other = await pickPerson(family, { title: t().pickOther(shortName(keep)), caption, extra: relationWords });
+            if (other) location.hash = which === 'a' ? relationRoute(other, b) : relationRoute(a, other);
+          },
+        }),
+      );
+      view.scrollTop = 0;
+      document.title = `${shortName(a)} & ${shortName(b)} — ${family.graph.title}`;
+      return;
+    }
+    case 'tree':
+      showTree(tree);
+      tree.emphasize(undefined);
+      document.title = family.graph.title;
+      return;
+    case 'path': {
+      const { a, b } = route;
+      showTree(tree, `${shortName(a)} ↔ ${shortName(b)}`, relationRoute(a, b));
+      tree.emphasize(family.path(a.id, b.id));
+      document.title = `${shortName(a)} ↔ ${shortName(b)} — ${family.graph.title}`;
+      return;
+    }
+  }
+}
+
+/** Puts a tree on screen, with a chip naming what it shows when it is not the whole family. */
+function showTree(overview: OverviewView, label?: string, closeTo = '#/'): void {
+  overview.element.querySelector('.tree-chip')?.remove();
+  if (label) {
+    const chip = document.createElement('div');
+    chip.className = 'tree-chip badge badge-lg bg-base-100 shadow-md';
+    const text = document.createElement('span');
+    text.textContent = label;
+    const close = document.createElement('a');
+    close.className = 'tree-chip-close';
+    close.href = closeTo;
+    close.title = t().close;
+    close.setAttribute('aria-label', t().close);
+    close.append(icon('close'));
+    chip.append(text, close);
+    overview.element.append(chip);
+  }
   view.replaceChildren(overview.element);
   overview.markViewer(viewer());
   overview.activate();
-  showGestureHint();
-  backButton.hidden = true;
-  document.title = family.graph.title;
+  showGestureHint(overview);
+  shownTree = overview;
 }
 
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', render);
 backButton.addEventListener('click', () => {
   location.hash = '#/';
 });
@@ -189,8 +288,8 @@ function openPerson(person: Person): void {
   closeResults();
   closeSearch();
   searchInput.blur();
-  // On the overview a hit centres the bubble instead of leaving the map.
-  if (location.hash === '' || location.hash === '#/') overview.highlight(person.id);
+  // On a tree a hit centres the bubble instead of leaving the map.
+  if (shownTree?.has(person.id)) shownTree.highlight(person.id);
   else location.hash = `#/p/${encodeURIComponent(person.id)}`;
 }
 
@@ -261,6 +360,12 @@ function renderMenu(): void {
   who.append(name);
   who.addEventListener('click', () => void chooseViewer());
 
+  const find = document.createElement('button');
+  find.type = 'button';
+  find.className = 'btn btn-soft btn-primary btn-sm w-full';
+  find.append(icon('link'), t().findRelation);
+  find.addEventListener('click', () => void findRelation());
+
   const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
   menuPanel.replaceChildren(
     group(t().iAm, who, hint(t().iAmHint)),
@@ -286,6 +391,7 @@ function renderMenu(): void {
         },
       ),
     ),
+    find,
   );
 }
 
@@ -332,8 +438,8 @@ function segmented<T extends string>(
 function refresh(): void {
   captions.clear();
   localize();
-  overview.localize();
-  route();
+  tree.localize();
+  render();
   if (menu.open) renderMenu();
 }
 
@@ -404,7 +510,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintTheme
 
 // ---- one-off gesture hint -------------------------------------------------
 
-function showGestureHint(): void {
+function showGestureHint(overview: OverviewView): void {
   if (readStored('stammbaum-hint') === 'seen') return;
   const touch = matchMedia('(pointer: coarse)').matches;
   const hint = document.createElement('div');
@@ -440,7 +546,7 @@ if (family.graph.warnings.length > 0) {
 }
 
 localize();
-route();
+render();
 
 function must<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);

@@ -42,6 +42,9 @@ const de = {
   language: 'Sprache',
   appearance: 'Darstellung',
   modes: { system: 'Automatisch', light: 'Hell', dark: 'Dunkel' },
+  findRelation: 'Verwandtschaft finden',
+  pickFirst: 'Wessen Verwandtschaft?',
+  pickOther: (name: string) => `${name} ist verwandt mit …`,
   close: 'Schließen',
   pickerPlaceholder: 'Name, Ort, Verwandtschaft …',
   noMatches: 'Niemand gefunden.',
@@ -72,7 +75,19 @@ const de = {
   photo: (n: number, of: number) => `Foto ${n} von ${of}`,
   previousPhoto: 'Voriges Foto',
   nextPhoto: 'Nächstes Foto',
+  relatedTo: 'Verwandt mit …',
+  howAreWeRelated: 'Wie sind wir verwandt?',
   thisIsMe: 'Das bin ich',
+
+  isTo: (from: string, to: string) => `Für ${from} ist ${to}`,
+  noTerm: 'keine eigene Bezeichnung',
+  samePerson: 'Das ist zweimal dieselbe Person.',
+  notConnected: 'Die beiden sind im Stammbaum nicht miteinander verbunden.',
+  path: 'Der Weg',
+  pathHint: 'Jeder Schritt sagt, was die Person für die vorige ist.',
+  showInTree: 'Im Stammbaum zeigen',
+  change: 'Ändern',
+  swap: 'Tauschen',
 };
 
 type Dict = typeof de;
@@ -104,6 +119,9 @@ const en: Dict = {
   language: 'Language',
   appearance: 'Appearance',
   modes: { system: 'Automatic', light: 'Light', dark: 'Dark' },
+  findRelation: 'Find a relationship',
+  pickFirst: 'Whose relationship?',
+  pickOther: (name) => `${name} is related to …`,
   close: 'Close',
   pickerPlaceholder: 'Name, place, relationship …',
   noMatches: 'Nobody found.',
@@ -133,7 +151,19 @@ const en: Dict = {
   photo: (n, of) => `Photo ${n} of ${of}`,
   previousPhoto: 'Previous photo',
   nextPhoto: 'Next photo',
+  relatedTo: 'Related to …',
+  howAreWeRelated: 'How are we related?',
   thisIsMe: 'This is me',
+
+  isTo: (from, to) => `To ${from}, ${to} is`,
+  noTerm: 'no word of its own',
+  samePerson: 'That is the same person twice.',
+  notConnected: 'The two are not connected in the tree.',
+  path: 'The path',
+  pathHint: 'Each step says what that person is to the one before.',
+  showInTree: 'Show in the tree',
+  change: 'Change',
+  swap: 'Swap',
 };
 
 const DICTS: Record<Lang, Dict> = { de, en };

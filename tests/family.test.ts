@@ -73,3 +73,19 @@ describe('adoption', () => {
     expect(family.adopted('nina')).toBe(false);
   });
 });
+
+describe('paths', () => {
+  it('goes through the common ancestors between blood relatives', () => {
+    expect(family.path('jonas', 'felix')).toEqual(['jonas', 'klaus', 'heinrich', 'brigitte', 'felix']);
+  });
+
+  it('crosses a partnership to reach in-laws', () => {
+    expect(family.path('emil', 'ayla')).toEqual(['emil', 'ayla']);
+    expect(family.path('tim', 'jonas')).toEqual(['tim', 'nina', 'klaus', 'jonas']);
+  });
+
+  it('is the person alone for a path to themselves, and nothing for strangers', () => {
+    expect(family.path('mia', 'mia')).toEqual(['mia']);
+    expect(family.path('mia', 'nobody')).toBeUndefined();
+  });
+});

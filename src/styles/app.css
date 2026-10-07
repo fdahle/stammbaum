@@ -199,6 +199,55 @@
     fill: var(--color-secondary);
   }
 
+  /* A path or a search result: everything else steps back. */
+  .tree.has-emphasis .node:not(.is-emphasized),
+  .tree.has-emphasis .links {
+    opacity: 0.28;
+    transition: opacity 0.2s ease;
+  }
+
+  .tree.has-emphasis .node.is-emphasized .bubble-ring {
+    fill: var(--color-primary);
+  }
+
+  .tree-chip {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    z-index: 3;
+    max-width: calc(100% - 32px);
+    height: auto;
+    min-height: 2.25rem;
+    gap: 6px;
+    padding-inline: 14px 6px;
+    transform: translateX(-50%);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .tree-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tree-chip-close {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    color: inherit;
+  }
+
+  .tree-chip-close:hover {
+    background: var(--color-base-200);
+  }
+
+  .tree-chip-close .icon {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
   /* ---- person view ------------------------------------------------------ */
 
   .person-view {
@@ -525,6 +574,108 @@
     width: 1rem;
     height: 1rem;
   }
+
+  /* ---- relation view ---------------------------------------------------- */
+
+  .relation-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 20px 12px calc(40px + env(safe-area-inset-bottom));
+  }
+
+  .relation-pair {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .relation-end {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .relation-terms {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    max-width: 380px;
+    padding: 18px 20px;
+    text-align: center;
+  }
+
+  .relation-line {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .relation-term {
+    margin: 0 0 10px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .relation-term:last-child {
+    margin-bottom: 0;
+  }
+
+  .relation-term.is-missing {
+    font-size: 0.9375rem;
+    font-weight: 400;
+    font-style: italic;
+    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+  }
+
+  .relation-note,
+  .relation-hint {
+    margin: 0;
+    max-width: 40ch;
+    text-align: center;
+    font-size: 0.875rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .relation-hint {
+    font-size: 0.75rem;
+  }
+
+  .relation-path-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .relation-path {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 4px 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .relation-path li {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .relation-arrow {
+    /* Level with the middle of the bubble next to it: tile padding + half a bubble − half an icon. */
+    margin-top: 32px;
+    color: color-mix(in oklab, var(--color-base-content) 35%, transparent);
+  }
+
 
   /* ---- app bar, search, floating bits ----------------------------------- */
 
@@ -871,6 +1022,10 @@
 
     .focus-card .bubble-html {
       --bubble-size: 168px;
+    }
+
+    .relation-arrow {
+      margin-top: 38px;
     }
 
     .row {

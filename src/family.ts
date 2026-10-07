@@ -63,6 +63,11 @@ export class Family {
     return [...new Set(ids)].map((p) => this.person(p)).filter(isPerson);
   }
 
+  children(id: string): Person[] {
+    const ids = (this.unionsByPartner.get(id) ?? []).flatMap((union) => union.children);
+    return [...new Set(ids)].map((c) => this.person(c)).filter(isPerson);
+  }
+
   adopted(id: string): boolean {
     return (this.unionsByChild.get(id) ?? []).some((union) => union.adopted?.includes(id));
   }
@@ -102,7 +107,52 @@ export class Family {
       .slice(0, options.limit ?? 8)
       .map((hit) => hit.person);
   }
+
+  // ---- paths --------------------------------------------------------------
+
+  /**
+   * The shortest chain of parent, child and partner links from `from` to `to`,
+   * both ends included. Blood links are cheaper than partnerships, so cousins
+   * are reached through their grandparents rather than through someone's
+   * in-laws.
+   */
+  path(from: string, to: string): string[] | undefined {
+    if (!this.person(from) || !this.person(to)) return undefined;
+    const cost = new Map([[from, 0]]);
+    const previous = new Map<string, string>();
+    const open = new Set([from]);
+    while (open.size > 0) {
+      let current = '';
+      let best = Infinity;
+      for (const id of open) {
+        const c = cost.get(id)!;
+        if (c < best) [current, best] = [id, c];
+      }
+      open.delete(current);
+      if (current === to) break;
+      const steps: Array<[string, number]> = [
+        ...this.parents(current).map((p): [string, number] => [p.id, 1]),
+        ...this.children(current).map((c): [string, number] => [c.id, 1]),
+        ...this.partnerships(current).flatMap(({ partner }): Array<[string, number]> =>
+          partner ? [[partner.id, 1.5]] : [],
+        ),
+      ];
+      for (const [next, weight] of steps) {
+        const c = best + weight;
+        if (c < (cost.get(next) ?? Infinity)) {
+          cost.set(next, c);
+          previous.set(next, current);
+          open.add(next);
+        }
+      }
+    }
+    if (!cost.has(to)) return undefined;
+    const chain = [to];
+    while (chain[0] !== from) chain.unshift(previous.get(chain[0]!)!);
+    return chain;
+  }
 }
+
 
 /** What a person can be found by, best match first. */
 function fields(person: Person): Array<string | undefined> {
