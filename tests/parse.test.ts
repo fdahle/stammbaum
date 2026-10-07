@@ -75,15 +75,16 @@ describe('parseFamily', () => {
     expect(graph.warnings[0]?.message).toBe('unknown person attribute "height"');
   });
 
-  it('reads places, job and a list of photos', () => {
+  it('reads places, job, login and a list of photos', () => {
     const graph = parseFamily(
-      '```family\nperson a "A" birthplace=Lindau deathplace="Bad Wörishofen" job="Lehrerin" lives=Lissabon photos=a.jpg, b.jpg\n```',
+      '```family\nperson a "A" birthplace=Lindau deathplace="Bad Wörishofen" job="Lehrerin" lives=Lissabon login=anna photos=a.jpg, b.jpg\n```',
     );
     expect(graph.people.get('a')).toMatchObject({
       birthplace: 'Lindau',
       deathplace: 'Bad Wörishofen',
       job: 'Lehrerin',
       lives: 'Lissabon',
+      login: 'anna',
       photos: ['a.jpg', 'b.jpg'],
     });
     expect(graph.warnings).toEqual([]);

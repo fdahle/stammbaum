@@ -6,7 +6,9 @@ import { LANGS, lang, setLang, t } from './i18n';
 import type { Person } from './parser/types';
 import { lifespan } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
+import { pickPerson } from './ui/picker';
 import { readStored, writeStored } from './ui/storage';
+import { bubble } from './ui/tile';
 import { OverviewView } from './views/overview';
 import { renderPerson } from './views/person';
 
@@ -52,6 +54,49 @@ actions.append(backButton, searchToggle, menu);
 must<HTMLElement>('#crest').append(icon('tree'));
 title.textContent = family.graph.title;
 
+// ---- who is looking -------------------------------------------------------
+
+/** Stored when someone says they are none of the people in the file. */
+const NOBODY = '-';
+
+/**
+ * Who the captions are written for: whoever said "this is me" on this device,
+ * else the person whose `login=` matches the login in front of the app, else
+ * the file's `me` line.
+ */
+function viewer(): string | undefined {
+  const chosen = readStored('stammbaum-me');
+  if (chosen === NOBODY) return undefined;
+  if (chosen && family.person(chosen)) return chosen;
+  const login = loginName();
+  return (login && family.byLogin(login)?.id) || family.graph.me;
+}
+
+/**
+ * The reverse proxy can hand over who logged in — see deploy/ — as a cookie,
+ * since a static page never sees the request headers.
+ */
+function loginName(): string | undefined {
+  const match = /(?:^|;\s*)stammbaum_login=([^;]+)/.exec(document.cookie);
+  if (!match) return undefined;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return match[1];
+  }
+}
+
+function setViewer(id: string | null): void {
+  writeStored('stammbaum-me', id ?? NOBODY);
+  refresh();
+}
+
+async function chooseViewer(): Promise<void> {
+  menu.open = false;
+  const chosen = await pickPerson(family, { title: t().whoAreYou, none: true });
+  if (chosen !== undefined) setViewer(chosen ? chosen.id : null);
+}
+
 const overview = new OverviewView(family, (id) => {
   location.hash = `#/p/${encodeURIComponent(id)}`;
 });
@@ -65,7 +110,7 @@ function route(): void {
   closeSearch();
 
   if (person) {
-    view.replaceChildren(renderPerson(family, person));
+    view.replaceChildren(renderPerson(family, person, { viewer: viewer(), setViewer }));
     view.scrollTop = 0;
     backButton.hidden = false;
     document.title = `${person.name} — ${family.graph.title}`;
@@ -74,6 +119,7 @@ function route(): void {
   if (match) location.replace('#/');
 
   view.replaceChildren(overview.element);
+  overview.markViewer(viewer());
   overview.activate();
   showGestureHint();
   backButton.hidden = true;
@@ -181,8 +227,21 @@ menu.addEventListener('toggle', () => {
 });
 
 function renderMenu(): void {
+  const me = viewer();
+  const person = me ? family.person(me) : undefined;
+
+  const who = document.createElement('button');
+  who.type = 'button';
+  who.className = 'settings-viewer';
+  const name = document.createElement('span');
+  name.textContent = person ? person.name : t().nobody;
+  if (person) who.append(bubble(person));
+  who.append(name);
+  who.addEventListener('click', () => void chooseViewer());
+
   const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
   menuPanel.replaceChildren(
+    group(t().iAm, who, hint(t().iAmHint)),
     group(
       t().language,
       segmented(
@@ -218,6 +277,13 @@ function group(label: string, ...content: HTMLElement[]): HTMLElement {
   return element;
 }
 
+function hint(text: string): HTMLElement {
+  const element = document.createElement('p');
+  element.className = 'settings-hint';
+  element.textContent = text;
+  return element;
+}
+
 /** A row of buttons of which exactly one is pressed. */
 function segmented<T extends string>(
   options: Array<{ id: T; label: string; icon?: IconName }>,
@@ -240,7 +306,7 @@ function segmented<T extends string>(
   return row;
 }
 
-/** After the language changed: every word again. */
+/** After the language or the viewer changed: every word and every caption again. */
 function refresh(): void {
   localize();
   overview.localize();

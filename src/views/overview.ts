@@ -73,6 +73,11 @@ export class OverviewView {
     this.stamp.textContent = buildStamp(__BUILD_TIME__, __FAMILY_COMMIT__);
   }
 
+  /** Rings whoever is looking at the tree. */
+  markViewer(id: string | undefined): void {
+    for (const [nodeId, element] of this.nodeElements) element.classList.toggle('is-me', nodeId === id);
+  }
+
   /** Called whenever the view becomes visible. */
   activate(): void {
     if (this.positioned) this.apply();

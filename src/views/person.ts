@@ -12,17 +12,23 @@ import {
 } from '../parser/types';
 import { bubble, tile } from '../ui/tile';
 import { ageOf, hasBirthday, longDate, parseDate, shortName, today, year, yearsBetween } from '../ui/format';
-import { weddingRings, RINGS } from '../ui/icons';
+import { icon, weddingRings, RINGS, type IconName } from '../ui/icons';
 import { openLightbox } from '../ui/lightbox';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+export interface PersonContext {
+  /** Who is looking: everyone is captioned with what they are to this person. */
+  viewer: string | undefined;
+  setViewer(id: string): void;
+}
 
 /**
  * One person and their first-degree relatives: parents above, partners beside,
  * children below. Connectors are drawn into an SVG overlay after layout, so
  * they stay correct however the rows wrap on a phone.
  */
-export function renderPerson(family: Family, person: Person): HTMLElement {
+export function renderPerson(family: Family, person: Person, context: PersonContext): HTMLElement {
   const root = document.createElement('article');
   root.className = 'person-view';
 
@@ -33,9 +39,9 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   const parents = family.parents(person.id);
   const partnerships = family.partnerships(person.id);
   const broods = family.broods(person.id);
-  // Everyone is captioned with what they are to the file's `me`.
-  const me = family.me();
-  const kin = (other: Person) => (me ? relation(family, me.id, other.id, lang()) : undefined);
+  // Everyone is captioned with what they are to whoever is looking.
+  const { viewer } = context;
+  const kin = (other: Person) => (viewer ? relation(family, viewer, other.id, lang()) : undefined);
 
   const parentTiles: HTMLElement[] = [];
   if (parents.length > 0) {
@@ -59,7 +65,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   left.className = 'partner-slot slot-left';
   const right = document.createElement('div');
   right.className = 'partner-slot slot-right';
-  const card = focusCard(family, person, kin(person));
+  const card = focusCard(family, person, kin(person), context);
   focusTier.append(left, card, right);
   root.append(focusTier);
 
@@ -131,7 +137,12 @@ function section(className: string, label: string): HTMLElement {
   return element;
 }
 
-function focusCard(family: Family, person: Person, relation: string | undefined): HTMLElement {
+function focusCard(
+  family: Family,
+  person: Person,
+  relation: string | undefined,
+  context: PersonContext,
+): HTMLElement {
   const card = document.createElement('div');
   card.className = `focus-card card bg-base-100 shadow-sm${person.died ? ' is-deceased' : ''}`;
   const portrait = bubble(person);
@@ -193,7 +204,35 @@ function focusCard(family: Family, person: Person, relation: string | undefined)
     });
     card.append(gallery);
   }
+
+  card.append(actions(person, context));
   return card;
+}
+
+/** What can be done from here: other views of this person and their family. */
+function actions(person: Person, context: PersonContext): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'focus-actions';
+  // A link where there is a place to go, a button where something happens.
+  const add = (iconName: IconName, label: string, target: string | (() => void)) => {
+    let element: HTMLElement;
+    if (typeof target === 'string') {
+      const link = document.createElement('a');
+      link.href = target;
+      element = link;
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.addEventListener('click', target);
+      element = button;
+    }
+    element.className = 'btn btn-sm btn-soft btn-primary';
+    element.append(icon(iconName), label);
+    row.append(element);
+  };
+
+  if (context.viewer !== person.id) add('me', t().thisIsMe, () => context.setViewer(person.id));
+  return row;
 }
 
 function line(className: string, text: string): HTMLElement {

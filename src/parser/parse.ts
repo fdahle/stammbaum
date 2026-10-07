@@ -7,7 +7,7 @@ import { type Diagnostic, type FamilyGraph, type Person, type Sex, type Union, u
  * markdown prose that the parser ignores. Grammar (one statement per line):
  *
  *   person <id> "<Name>" [key=value ...]     born= died= photo= maiden= nick= note= sex=
- *                                            birthplace= deathplace= job= lives= photos=
+ *                                            birthplace= deathplace= job= lives= photos= login=
  *   <a> + <b> [key=value ...]                married= divorced= together= separated= adopted=
  *   <a> + <b> -> <child>, <child>            children of that union
  *   <a> -> <child>                           children with an unknown second parent
@@ -99,7 +99,7 @@ function tokenize(text: string): Token[] {
 
 const PERSON_KEYS = new Set([
   'born', 'died', 'photo', 'maiden', 'nick', 'note', 'sex',
-  'birthplace', 'deathplace', 'job', 'lives', 'photos',
+  'birthplace', 'deathplace', 'job', 'lives', 'photos', 'login',
 ]);
 /** `w` for weiblich, since the people writing the file speak German. */
 const SEXES = new Map<string, Sex>([

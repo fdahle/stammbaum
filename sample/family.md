@@ -10,7 +10,7 @@ the app picks up instead whenever it exists — see the README.
 
 | Statement | Meaning |
 | --- | --- |
-| `person <id> "<Name>" key=value ...` | declares a person. Keys: `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex` (`m` or `f`), `birthplace`, `deathplace`, `job`, `lives`, `photos` |
+| `person <id> "<Name>" key=value ...` | declares a person. Keys: `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex` (`m` or `f`), `birthplace`, `deathplace`, `job`, `lives`, `photos`, `login` |
 | `<a> + <b> married=1956 divorced=1974` | a partnership. Remarriage = a second `+` line with the new partner |
 | `<a> + <b> together=2015 separated=2020` | an unmarried couple — `together` instead of `married`, `separated` instead of `divorced` |
 | `<a> + <b> divorced=?` | `?` or `true` instead of a date: it happened, the year is unknown or nobody's business — no year is shown |
@@ -57,7 +57,7 @@ thomas + petra married=1992 adopted=marie
 %% ---- Generation 3 -------------------------------------------------------
 person nina  "Nina Falk"    sex=f born=1986-02-17 maiden=Bauer
 person tim   "Tim Falk"     sex=m born=1984-11-04
-person jonas "Jonas Bauer"  sex=m born=1989-05-23 lives=Lissabon job=Architekt
+person jonas "Jonas Bauer"  sex=m born=1989-05-23 lives=Lissabon job=Architekt login=jonas
 person luca  "Luca Bauer"   sex=m born=2003-07-12
 person felix "Felix Keller" sex=m born=1990-03-31
 person ayla  "Ayla Keller"  sex=f born=1991-01-25 maiden=Demir

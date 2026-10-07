@@ -104,11 +104,11 @@ nina + david together=2012 separated=2018
 | `<a> + <b> key=value …` | A partnership. |
 | `<a> + <b> -> <child>, <child>` | Children of that partnership. |
 | `<a> -> <child>` | Children whose second parent is unknown. |
-| `me <id>` | Whose point of view relations are named from. |
+| `me <id>` | Whose point of view relations are named from, by default. |
 | `%% …` | Comment. |
 
 **Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`,
-`birthplace`, `deathplace`, `job`, `lives`, `photos`.
+`birthplace`, `deathplace`, `job`, `lives`, `photos`, `login`.
 **Partnership keys** — `married`, `divorced`, `together`, `separated`,
 `children`, `adopted`.
 
@@ -129,11 +129,12 @@ Notes:
   them short, lowercase and stable.
 - `nick` wins over the first name in bubbles: the tree says *Oma*, the detail
   view says *Elisabeth Bauer*.
-- With a `me <id>` line, every person in the detail view is captioned with what
-  they are to that person: *Tante*, *Cousine 2. Grades*, *Schwager*, *Mann der
-  Cousine*. `sex=m` or `sex=f` (`w` works too) picks the gendered word; without
-  it the caption names both (*Onkel/Tante*). People who are neither blood
-  relatives nor one partnership away from one get no caption.
+- Every person in the detail view is captioned with what they are to whoever
+  is looking — see [Who is looking](#who-is-looking): *Tante*, *Cousine 2.
+  Grades*, *Schwager*, *Mann der Cousine*, or in English *Aunt*, *Second
+  cousin*, *Cousin's husband*. `sex=m` or `sex=f` (`w` works too) picks the
+  gendered word; without it the caption names both (*Onkel/Tante*). People who
+  are neither blood relatives nor one partnership away from one get no caption.
 - With a full `born` date the card shows the age — *37 Jahre*, or *wurde 80
   Jahre alt* with a `died` date too — and a note on the birthday itself. With
   only a year it says *etwa*. A lasting partnership says how long it has
@@ -151,8 +152,25 @@ Notes:
   without a photo gets an initials bubble in a colour derived from their id.
   `photos=a.jpg, b.jpg` adds more pictures; the card shows them as a gallery,
   and tapping the portrait opens them full screen.
+- `login` is the person's user name at the login in front of the app — see
+  [Who is looking](#who-is-looking).
 - Undeclared ids still render, and the app shows a dismissible list of hints
   about the file — a half-finished tree never breaks the page.
+
+## Who is looking
+
+The captions are written for one person, the viewer. The app picks them in
+this order:
+
+1. Whoever tapped **Das bin ich** on their card, or chose themselves under
+   **Ich bin** in the menu — remembered on that phone.
+2. The person whose `login=` matches who logged in, when the app runs behind
+   a login such as Authelia. A static page never sees request headers, so the
+   reverse proxy passes the user name on as a `stammbaum_login` cookie — see
+   [`deploy/nginx-stammbaum.conf`](deploy/nginx-stammbaum.conf).
+3. The file's `me` line.
+
+"Niemand davon" in the picker turns the captions off on that phone.
 
 ## Language
 

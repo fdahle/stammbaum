@@ -34,10 +34,17 @@ const de = {
   warningLine: (line: number, message: string) => `Zeile ${line}: ${message}`,
 
   menu: 'Einstellungen',
+  iAm: 'Ich bin',
+  nobody: 'Niemand ausgewählt',
+  iAmHint: 'Alle werden mit ihrer Verwandtschaft zu dir beschriftet.',
+  whoAreYou: 'Wer bist du?',
+  noneOfThem: 'Niemand davon',
   language: 'Sprache',
   appearance: 'Darstellung',
   modes: { system: 'Automatisch', light: 'Hell', dark: 'Dunkel' },
   close: 'Schließen',
+  pickerPlaceholder: 'Name, Ort, Verwandtschaft …',
+  noMatches: 'Niemand gefunden.',
 
   fit: 'Ganzen Stammbaum zeigen',
 
@@ -65,6 +72,7 @@ const de = {
   photo: (n: number, of: number) => `Foto ${n} von ${of}`,
   previousPhoto: 'Voriges Foto',
   nextPhoto: 'Nächstes Foto',
+  thisIsMe: 'Das bin ich',
 };
 
 type Dict = typeof de;
@@ -88,10 +96,17 @@ const en: Dict = {
   warningLine: (line, message) => `Line ${line}: ${message}`,
 
   menu: 'Settings',
+  iAm: 'I am',
+  nobody: 'Nobody chosen',
+  iAmHint: 'Everyone is labelled with how they are related to you.',
+  whoAreYou: 'Who are you?',
+  noneOfThem: 'None of them',
   language: 'Language',
   appearance: 'Appearance',
   modes: { system: 'Automatic', light: 'Light', dark: 'Dark' },
   close: 'Close',
+  pickerPlaceholder: 'Name, place, relationship …',
+  noMatches: 'Nobody found.',
 
   fit: 'Show the whole tree',
 
@@ -118,6 +133,7 @@ const en: Dict = {
   photo: (n, of) => `Photo ${n} of ${of}`,
   previousPhoto: 'Previous photo',
   nextPhoto: 'Next photo',
+  thisIsMe: 'This is me',
 };
 
 const DICTS: Record<Lang, Dict> = { de, en };

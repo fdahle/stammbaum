@@ -40,6 +40,12 @@ export class Family {
     return this.graph.me === undefined ? undefined : this.person(this.graph.me);
   }
 
+  /** The person whose `login=` is this user name. */
+  byLogin(login: string): Person | undefined {
+    const wanted = login.toLowerCase();
+    return this.people().find((p) => p.login?.toLowerCase() === wanted);
+  }
+
   /** The partnership someone was born into. */
   parentUnion(id: string): Union | undefined {
     return this.unionsByChild.get(id)?.[0];
