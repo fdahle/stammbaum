@@ -1,5 +1,6 @@
 # `docker compose up -d --build` builds the single-file app and serves it on
-# :8080. Run it again after editing the family.
+# 127.0.0.1:8080 — only the host itself can reach it, so the reverse proxy in
+# front (see deploy/) is the only way in. Run it again after editing the family.
 services:
   web:
     build:
@@ -8,5 +9,5 @@ services:
         # Leave unset for data/ (or sample/ without it); `FAMILY_DIR=sample` for the sample.
         FAMILY_DIR: ${FAMILY_DIR:-}
     ports:
-      - "${PORT:-8080}:80"
+      - "127.0.0.1:${PORT:-8080}:80"
     restart: unless-stopped

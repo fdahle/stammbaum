@@ -44,9 +44,12 @@ npm run build:single # dist/index.html — ONE self-contained file, works offlin
 ```
 
 To host it, `docker compose up -d --build` runs `build:single` in a Node build
-stage and serves the resulting `index.html` from nginx on port 8080 (`PORT=…`
-to change it); run it again after editing the family. A build from `data/` puts
-the whole family online, so keep that server private.
+stage and serves the resulting `index.html` from nginx on `127.0.0.1:8080`
+(`PORT=…` to change it); run it again after editing the family. A build from
+`data/` puts the whole family online, so keep that server private: the port is
+only reachable from the host itself, and a reverse proxy there adds the login —
+[`deploy/`](deploy/) has an example for nginx with
+[Authelia](https://www.authelia.com) in front.
 
 ## Keeping the family private
 
