@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ageOf, hasBirthday, parseDate, yearsBetween } from '../src/ui/format';
+import { ageOf, hasBirthday, lifespan, parseDate, yearsBetween } from '../src/ui/format';
 
 const on = (y: number, m: number, d: number) => ({ y, m, d });
 
@@ -48,5 +48,19 @@ describe('dates and ages', () => {
     expect(hasBirthday({ id: 'a', name: 'A', born: '1989-10-07' }, on(2026, 10, 7))).toBe(true);
     expect(hasBirthday({ id: 'a', name: 'A', born: '1989-10' }, on(2026, 10, 7))).toBe(false);
     expect(hasBirthday({ id: 'a', name: 'A', born: '1931-10-07', died: '2011' }, on(2026, 10, 7))).toBe(false);
+  });
+});
+
+describe('lifespan', () => {
+  it('marks a death without a date with a cross rather than the word', () => {
+    expect(lifespan({ id: 'a', name: 'A', born: '1920', died: 'true' })).toBe('1920 – †');
+    expect(lifespan({ id: 'a', name: 'A', born: '1920', died: '?' })).toBe('1920 – †');
+    expect(lifespan({ id: 'a', name: 'A', died: 'ja' })).toBe('†');
+  });
+
+  it('prints known years as before', () => {
+    expect(lifespan({ id: 'a', name: 'A', born: '1920-03-01', died: '1990' })).toBe('1920 – 1990');
+    expect(lifespan({ id: 'a', name: 'A', born: '1986' })).toBe('* 1986');
+    expect(lifespan({ id: 'a', name: 'A', born: '?' })).toBe('');
   });
 });

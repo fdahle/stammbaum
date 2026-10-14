@@ -30,6 +30,11 @@ export interface Person {
   line?: number;
 }
 
+/** `died=1990`, but also `died=?` or `died=true` when nobody knows when. */
+export function isDeceased(person: Person): boolean {
+  return person.died !== undefined;
+}
+
 export type Sex = 'm' | 'f';
 
 /** A partnership. Divorce and remarriage are modelled as separate unions. */
@@ -63,24 +68,25 @@ export function unionStatus(union: Union): UnionStatus {
 }
 
 /**
- * `divorced=true`, `together=?`, a bare `married=` — the partnership is a fact,
- * the date is unknown or beside the point. The state still counts; the date is
- * simply not there, so nothing is printed for it.
+ * `divorced=true`, `died=?`, a bare `married=` — the event is a fact, the date
+ * is unknown or beside the point. The state still counts; the date is simply
+ * not there, so nothing is printed for it.
  */
 const UNDATED = new Set(['', '?', 'true', 'yes', 'ja', 'x']);
 
-function date(value: string | undefined): string | undefined {
+/** The date as written, or `undefined` when there is none to print. */
+export function knownDate(value: string | undefined): string | undefined {
   return value === undefined || UNDATED.has(value.toLowerCase()) ? undefined : value;
 }
 
 /** When the partnership began, whether or not it was a marriage. */
 export function unionStart(union: Union): string | undefined {
-  return date(union.married) ?? date(union.together);
+  return knownDate(union.married) ?? knownDate(union.together);
 }
 
 /** When it ended, or `undefined` while it lasts — or while the date is unknown. */
 export function unionEnd(union: Union): string | undefined {
-  return date(union.divorced) ?? date(union.separated);
+  return knownDate(union.divorced) ?? knownDate(union.separated);
 }
 
 export interface Diagnostic {

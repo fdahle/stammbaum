@@ -3,6 +3,8 @@ import type { Family } from '../family';
 import { lang, t } from '../i18n';
 import { relation } from '../kinship';
 import {
+  isDeceased,
+  knownDate,
   unionEnd,
   unionStart,
   unionStatus,
@@ -146,7 +148,7 @@ function focusCard(
   context: PersonContext,
 ): HTMLElement {
   const card = document.createElement('div');
-  card.className = `focus-card card bg-base-100 shadow-sm${person.died ? ' is-deceased' : ''}`;
+  card.className = `focus-card card bg-base-100 shadow-sm${isDeceased(person) ? ' is-deceased' : ''}`;
   const portrait = bubble(person);
   card.append(portrait);
 
@@ -164,13 +166,15 @@ function focusCard(
 
   const now = today();
   const dates: string[] = [];
-  // `* 2. April 1931 in Lindau` — the date, the place, or both.
-  const dated = (mark: string, date: string | undefined, where: string | undefined) => {
-    if (!date && !where) return;
-    dates.push([mark, longDate(date), where && t().inPlace(where)].filter(Boolean).join(' '));
+  // `* 2. April 1931 in Lindau` — the date, the place, or both. A death with
+  // neither still gets its cross.
+  const dated = (mark: string, date: string | undefined, where: string | undefined, always = false) => {
+    const when = knownDate(date);
+    if (!when && !where && !always) return;
+    dates.push([mark, longDate(when), where && t().inPlace(where)].filter(Boolean).join(' '));
   };
   dated('*', person.born, person.birthplace);
-  dated('†', person.died, person.deathplace);
+  dated('†', person.died, person.deathplace, isDeceased(person));
   if (dates.length > 0) card.append(line('focus-dates', dates.join('\n')));
 
   const age = ageOf(person, now);

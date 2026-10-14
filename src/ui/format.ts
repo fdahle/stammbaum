@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import type { Person } from '../parser/types';
+import { isDeceased, knownDate, type Person } from '../parser/types';
 
 /** What we call someone in a bubble: the nickname if the family uses one. */
 export function shortName(person: Person): string {
@@ -26,14 +26,14 @@ export function year(date: string | undefined): string {
   return date ? (YEAR.exec(date)?.[1] ?? date) : '';
 }
 
-/** `1931 – 2011`, `* 1986`, or nothing at all. */
+/** `1931 – 2011`, `* 1986`, `1920 – †` with no death date, or nothing at all. */
 export function lifespan(person: Person): string {
-  const born = year(person.born);
-  const died = year(person.died);
+  const born = year(knownDate(person.born));
+  const died = year(knownDate(person.died));
   if (born && died) return `${born} – ${died}`;
   if (died) return `† ${died}`;
-  if (born) return `* ${born}`;
-  return '';
+  if (born) return isDeceased(person) ? `${born} – †` : `* ${born}`;
+  return isDeceased(person) ? '†' : '';
 }
 
 /** `2. April 1931` or `2 April 1931` — full dates for the detail view. */
@@ -97,7 +97,7 @@ const OLDEST = 110;
 export function ageOf(person: Person, now: DateParts): { years: number; approx: boolean; final: boolean } | undefined {
   const born = parseDate(person.born);
   if (!born) return undefined;
-  if (person.died !== undefined) {
+  if (isDeceased(person)) {
     const died = parseDate(person.died);
     const age = died && yearsBetween(born, died);
     return age ? { ...age, final: true } : undefined;

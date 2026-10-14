@@ -3,7 +3,7 @@ import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from
 import { photoUrl } from '../data';
 import { familyName, initials, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
 import { icon, weddingRings, RINGS } from '../ui/icons';
-import { unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
+import { isDeceased, unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
 import { t } from '../i18n';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -513,7 +513,7 @@ export class OverviewView {
   private drawNode(person: Person, node: NodeBox): SVGGElement {
     const r = METRICS.bubbleRadius;
     const group = svgEl('g', {
-      class: `node${person.died ? ' is-deceased' : ''}`,
+      class: `node${isDeceased(person) ? ' is-deceased' : ''}`,
       transform: `translate(${node.x} ${node.y})`,
       tabindex: 0,
       role: 'button',
