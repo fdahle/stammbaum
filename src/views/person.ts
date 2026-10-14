@@ -130,6 +130,31 @@ export function renderPerson(family: Family, person: Person, context: PersonCont
     root.append(tier);
   }
 
+  // Brothers and sisters last, without wires: the children's hang in between.
+  const siblings = family.siblings(person.id);
+  if (siblings.length > 0) {
+    const tier = section('tier tier-siblings', siblings.length === 1 ? t().sibling : t().siblings);
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const { person: sibling, half } of siblings) {
+      const element = tile(sibling, kin(sibling));
+      // Looking at oneself, the caption already says so.
+      if (half && viewer !== person.id) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'partner';
+        const pill = document.createElement('span');
+        pill.className = 'relation-pill badge badge-sm badge-soft';
+        pill.textContent = t().halfSibling(sibling.sex);
+        wrapper.append(element, pill);
+        row.append(wrapper);
+      } else {
+        row.append(element);
+      }
+    }
+    tier.append(row);
+    root.append(tier);
+  }
+
   if (parents.length === 0 && partnerships.length === 0 && broods.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'opacity-60';

@@ -1,5 +1,5 @@
 import type { GapKind } from './missing';
-import type { UnionStatus } from './parser/types';
+import type { Sex, UnionStatus } from './parser/types';
 import { readStored, writeStored } from './ui/storage';
 
 /**
@@ -127,6 +127,8 @@ const de = {
   parents: 'Eltern',
   child: 'Kind',
   children: 'Kinder',
+  siblings: 'Geschwister',
+  halfSibling: (sex: Sex | undefined): string => (sex === 'f' ? 'Halbschwester' : sex === 'm' ? 'Halbbruder' : 'Halbgeschwister'),
   withPartner: (name: string) => `mit ${name}`,
   noRelatives: 'Keine Verwandten in der Datei hinterlegt.',
   nee: (name: string) => `geb. ${name}`,
@@ -403,6 +405,8 @@ const en: Dict = {
   parents: 'Parents',
   child: 'Child',
   children: 'Children',
+  siblings: 'Siblings',
+  halfSibling: (sex) => (sex === 'f' ? 'half-sister' : sex === 'm' ? 'half-brother' : 'half-sibling'),
   withPartner: (name) => `with ${name}`,
   noRelatives: 'No relatives in the file.',
   nee: (name) => `née ${name}`,

@@ -22,6 +22,17 @@ describe('Family', () => {
     ]);
   });
 
+  it('lists brothers and sisters, full ones first, half ones marked', () => {
+    expect(family.siblings('nina').map((s) => [s.person.id, s.half])).toEqual([
+      ['jonas', false],
+      ['luca', true],
+    ]);
+    expect(family.siblings('luca').map((s) => [s.person.id, s.half])).toEqual([
+      ['nina', true],
+      ['jonas', true],
+    ]);
+  });
+
   it('leaves childless partnerships out of the broods', () => {
     expect(family.broods('elisabeth').every((b) => b.children.length > 0)).toBe(true);
   });

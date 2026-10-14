@@ -61,6 +61,26 @@ export class Family {
     return [...new Set(ids)].map((c) => this.person(c)).filter(isPerson);
   }
 
+  /**
+   * Brothers and sisters: everyone with a parent in common, full siblings
+   * first. Half is by who the parents are, not by partnership — a couple who
+   * married each other twice has full siblings across both.
+   */
+  siblings(id: string): Array<{ person: Person; half: boolean }> {
+    const mine = this.parents(id).map((p) => p.id);
+    const seen = new Set([id]);
+    const found: Array<{ person: Person; half: boolean }> = [];
+    for (const parent of mine) {
+      for (const child of this.children(parent)) {
+        if (seen.has(child.id)) continue;
+        seen.add(child.id);
+        const theirs = new Set(this.parents(child.id).map((p) => p.id));
+        found.push({ person: child, half: mine.length !== theirs.size || mine.some((p) => !theirs.has(p)) });
+      }
+    }
+    return [...found.filter((s) => !s.half), ...found.filter((s) => s.half)];
+  }
+
   adopted(id: string): boolean {
     return (this.unionsByChild.get(id) ?? []).some((union) => union.adopted?.includes(id));
   }
