@@ -186,6 +186,8 @@ const de = {
   addMenu: 'Hinzufügen',
   menuBack: 'Zurück',
   sharedParents: 'Gemeinsame Eltern',
+  sharedChildren: 'Gemeinsame Kinder',
+  alsoParentOf: 'Auch Elternteil von',
   halfVia: (name: string) => `nur ${name} (Halbgeschwister)`,
   siblingParentsHint: (name: string) =>
     `Geschwister haben gemeinsame Eltern, und ${name} hat noch keine. Wer sind sie? Leer gelassen steht dort vorerst „Eltern von ${name}“ — zum späteren Umbenennen.`,
@@ -441,6 +443,8 @@ const en: Dict = {
   addMenu: 'Add',
   menuBack: 'Back',
   sharedParents: 'Shared parents',
+  sharedChildren: 'Children together',
+  alsoParentOf: 'Also a parent of',
   halfVia: (name) => `only ${name} (half-sibling)`,
   siblingParentsHint: (name) =>
     `Siblings share parents, and ${name} has none yet. Who are they? Left empty, it says “Parents of ${name}” for now — to rename later.`,

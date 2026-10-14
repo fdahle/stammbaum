@@ -369,6 +369,8 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
 
   // Or someone who is already there.
   let existing: Person | undefined;
+  /** Kinds whose further questions depend on who was chosen ask again. */
+  let chosenChanged: (() => void) | undefined;
   const chosen = document.createElement('div');
   chosen.className = 'relative-existing';
   const paintChosen = () => {
@@ -392,6 +394,7 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
         });
       }));
     }
+    chosenChanged?.();
   };
   paintChosen();
   sheet.body.append(form.element, chosen);
@@ -404,6 +407,21 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
   let partnership: ReturnType<typeof partnershipFields> | undefined;
   let shared: ReturnType<typeof choiceField<string>> | undefined;
   let newParents: Array<Field<string | null>> = [];
+  /** Children who get the new person as their other parent, each with a box to say so. */
+  let alsoParentOf: Array<{ child: Person; box: ReturnType<typeof checkField> }> = [];
+  const alsoParent = document.createElement('div');
+  alsoParent.className = 'form-group';
+  const askAlsoParent = (label: string, children: Person[]) => {
+    alsoParentOf = children.map((child) => ({ child, box: checkField(shortName(child), true) }));
+    alsoParent.hidden = alsoParentOf.length === 0;
+    const heading = document.createElement('p');
+    heading.className = 'form-label';
+    heading.textContent = label;
+    alsoParent.replaceChildren(heading, ...alsoParentOf.map(({ box }) => box.element));
+  };
+  /** Children someone has with nobody else named: the ones a new partner may well be the other parent of. */
+  const ownChildren = (id: string) =>
+    family.graph.unions.filter((u) => u.partners.length === 1 && u.partners[0] === id).flatMap((u) => u.children.map((c) => family.person(c)!).filter(Boolean));
   const loneParent = family.graph.unions.find((u) => u.children.includes(person.id) && u.partners.length === 1);
   if (kind === 'sibling') {
     // Siblings are children of the same parents: these, or one of them for a half-sibling.
@@ -436,10 +454,19 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
     sheet.body.append(otherParent.element, adopted.element);
   } else if (kind === 'partner') {
     partnership = partnershipFields(undefined);
-    sheet.body.append(partnership.element);
+    // Their children so far had one parent named: the new partner may be the other.
+    chosenChanged = () => {
+      const children = [...ownChildren(person.id), ...(existing ? ownChildren(existing.id) : [])];
+      askAlsoParent(t().sharedChildren, [...new Map(children.map((c) => [c.id, c])).values()]);
+    };
+    chosenChanged();
+    sheet.body.append(partnership.element, alsoParent);
   } else if (loneParent) {
     together = checkField(t().togetherWith(namesOf(family, loneParent.partners)), true);
-    sheet.body.append(together.element);
+    // Brothers and sisters with the same one parent named most likely share the new one too.
+    askAlsoParent(t().alsoParentOf, loneParent.children.filter((c) => c !== person.id).map((c) => family.person(c)!).filter(Boolean));
+    together.onChange((on) => (alsoParent.hidden = !on || alsoParentOf.length === 0));
+    sheet.body.append(together.element, alsoParent);
   }
 
   const add = button(t().add, 'btn-primary', () => {
@@ -469,6 +496,9 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
           return false;
         }
         edits.push({ kind: 'add-partnership', partners: [person.id, target!], set: set.set });
+        for (const { child, box } of alsoParentOf) {
+          if (box.value()) edits.push({ kind: 'add-child', parents: [person.id, target!], child: child.id });
+        }
         message = t().msg.addedPartner(person.name, name!);
       } else if (kind === 'sibling') {
         let parents: string[];
@@ -487,8 +517,9 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
         message = t().msg.addedSibling(name!, person.name);
       } else {
         if (loneParent && together?.value()) {
-          edits.push({ kind: 'remove-child', union: loneParent.id, child: person.id });
-          edits.push({ kind: 'add-child', parents: [...loneParent.partners, target!], child: person.id });
+          // As a child of both, they are no longer listed under the one parent alone.
+          const children = [person, ...alsoParentOf.filter(({ box }) => box.value()).map(({ child }) => child)];
+          for (const child of children) edits.push({ kind: 'add-child', parents: [...loneParent.partners, target!], child: child.id });
         } else {
           edits.push({ kind: 'add-child', parents: [target!], child: person.id });
         }

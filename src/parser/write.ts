@@ -524,11 +524,28 @@ function deletePartnership(doc: Doc, id: string): void {
 
 // ---- children ---------------------------------------------------------------
 
+/**
+ * `child` as a child of `parents`. A child of both is no longer also listed
+ * as a child of just one of them — knowing the second parent replaces not
+ * knowing them — and a child of a couple already is a child of each.
+ */
 function addChild(doc: Doc, parents: string[], child: string, adopted: boolean): void {
   if (parents.length < 1 || parents.length > 2) throw new EditError('invalid', 'a child needs one or two parents');
   requirePeople(doc, [...parents, child]);
   const union = currentUnion(doc, parents);
   if (union?.children.includes(child) && (!adopted || union.adopted?.includes(child))) return;
+  const throughCouple = doc.graph().unions.some((u) => u.partners.length > parents.length && parents.every((p) => u.partners.includes(p)) && u.children.includes(child));
+  if (throughCouple && !adopted) return;
+
+  writeChild(doc, parents, child, adopted);
+
+  const fewer = () =>
+    doc.graph().unions.find((u) => u.partners.length < parents.length && u.partners.every((p) => parents.includes(p)) && u.children.includes(child));
+  for (let lone = fewer(); lone; lone = fewer()) removeChild(doc, lone.id, child);
+}
+
+function writeChild(doc: Doc, parents: string[], child: string, adopted: boolean): void {
+  const union = currentUnion(doc, parents);
 
   if (!union) {
     const statement = `${parents.join(' + ')} ${adopted ? `adopted=${child}` : `-> ${child}`}`;
