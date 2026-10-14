@@ -490,6 +490,24 @@
     color: var(--color-primary);
   }
 
+  .focus-viewer {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+    cursor: pointer;
+  }
+
+  .focus-viewer:hover,
+  .focus-viewer:focus-visible {
+    color: var(--color-primary);
+    text-decoration: underline;
+    outline: none;
+  }
+
   .focus-nick,
   .focus-maiden {
     margin: 0;
@@ -827,6 +845,12 @@
     margin: 0;
     font-size: 1.0625rem;
     font-weight: 600;
+  }
+
+  .picker-hint {
+    margin: -6px 0 0;
+    font-size: 0.8125rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
   }
 
   .picker-list {

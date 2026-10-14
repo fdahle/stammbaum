@@ -25,6 +25,8 @@ export interface PersonContext {
   /** Asks who to compare `person` with, then shows how the two are related. */
   pickRelative(person: Person): void;
   setViewer(id: string): void;
+  /** Asks who is looking. */
+  chooseViewer(): void;
 }
 
 /**
@@ -166,6 +168,18 @@ function focusCard(
   name.textContent = person.name;
   card.append(name);
   if (relation) card.append(line('focus-relation', relation));
+  // Says whose point of view every caption here is written from, and lets a
+  // borrowed phone change it.
+  const viewer = context.viewer && context.viewer !== person.id ? family.person(context.viewer) : undefined;
+  if (viewer) {
+    const seen = document.createElement('button');
+    seen.type = 'button';
+    seen.className = 'focus-viewer';
+    seen.textContent = t().seenBy(shortName(viewer));
+    seen.title = t().changeViewer;
+    seen.addEventListener('click', () => context.chooseViewer());
+    card.append(seen);
+  }
 
   if (person.nick && person.nick !== shortName(person)) {
     card.append(line('focus-nick', lang() === 'de' ? `„${person.nick}“` : `“${person.nick}”`));

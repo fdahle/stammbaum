@@ -40,6 +40,8 @@ export class OverviewView {
   private view: View = { k: 1, x: 0, y: 0 };
   private positioned = false;
   private highlighted: string | undefined;
+  /** Who the opening view centres on when the tree does not fit. */
+  private focus: string | undefined;
   private animation = 0;
   private momentum = 0;
 
@@ -108,10 +110,20 @@ export class OverviewView {
     });
   }
 
-  /** Called whenever the view becomes visible. */
-  activate(): void {
+  /**
+   * Called whenever the view becomes visible. The first time, a tree too big
+   * for the screen opens on `focus` — whoever is looking, say — rather than on
+   * whatever happens to be in the middle.
+   */
+  activate(focus?: string): void {
+    this.focus = focus;
     if (this.positioned) this.apply();
     else this.frame();
+  }
+
+  /** Forgets where the view was left, so the next `activate` opens afresh. */
+  reframe(): void {
+    this.positioned = false;
   }
 
   /** The opening view: readable rather than complete, which matters on a phone. */
@@ -123,10 +135,13 @@ export class OverviewView {
       READABLE_SCALE,
       1,
     );
+    const node = this.focus === undefined ? undefined : this.layout.nodes.get(this.focus);
+    const fitsAcross = this.layout.width * k <= box.width;
+    const fitsDown = this.height * k <= box.height;
     this.set({
       k,
-      x: (box.width - this.layout.width * k) / 2,
-      y: Math.min((box.height - this.height * k) / 2, 24),
+      x: node && !fitsAcross ? box.width / 2 - node.x * k : (box.width - this.layout.width * k) / 2,
+      y: node && !fitsDown ? box.height * 0.42 - node.y * k : Math.min((box.height - this.height * k) / 2, 24),
     });
     this.positioned = true;
   }

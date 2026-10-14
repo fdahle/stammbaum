@@ -70,8 +70,13 @@ function viewer(): string | undefined {
   const chosen = readStored('stammbaum-me');
   if (chosen === NOBODY) return undefined;
   if (chosen && family.person(chosen)) return chosen;
+  return loginViewer() ?? family.graph.me;
+}
+
+/** The person who logged in, when the login in front of the app says so. */
+function loginViewer(): string | undefined {
   const login = loginName();
-  return (login && family.byLogin(login)?.id) || family.graph.me;
+  return login ? family.byLogin(login)?.id : undefined;
 }
 
 /**
@@ -90,6 +95,8 @@ function loginName(): string | undefined {
 
 function setViewer(id: string | null): void {
   writeStored('stammbaum-me', id ?? NOBODY);
+  // Someone new is looking: the tree opens on them next time it is shown.
+  tree.reframe();
   refresh();
 }
 
@@ -116,8 +123,20 @@ function relationWords(person: Person): Array<string | undefined> {
 
 async function chooseViewer(): Promise<void> {
   menu.open = false;
-  const chosen = await pickPerson(family, { title: t().whoAreYou, none: true });
+  const chosen = await pickPerson(family, { title: t().whoAreYou, hint: t().iAmHint, none: true });
   if (chosen !== undefined) setViewer(chosen ? chosen.id : null);
+}
+
+/**
+ * A first visit with no login to go by asks who is looking, rather than
+ * quietly captioning everything for the file's `me`. Asked once: closing the
+ * sheet keeps the `me` line, and the menu can still change it.
+ */
+function welcome(): void {
+  if (readStored('stammbaum-me') !== null || readStored('stammbaum-asked') !== null) return;
+  if (loginViewer() || family.people().length < 2) return;
+  writeStored('stammbaum-asked', 'yes');
+  void chooseViewer();
 }
 
 /** Asks who to compare `person` with, then shows how the two are related. */
@@ -203,7 +222,9 @@ function render(): void {
   switch (route.kind) {
     case 'person': {
       const { person } = route;
-      view.replaceChildren(renderPerson(family, person, { viewer: viewer(), pickRelative, setViewer }));
+      view.replaceChildren(
+        renderPerson(family, person, { viewer: viewer(), pickRelative, setViewer, chooseViewer: () => void chooseViewer() }),
+      );
       view.scrollTop = 0;
       document.title = `${person.name} — ${family.graph.title}`;
       return;
@@ -224,7 +245,7 @@ function render(): void {
       return;
     }
     case 'tree':
-      showTree(tree);
+      showTree(tree, undefined, undefined, viewer());
       tree.emphasize(undefined);
       document.title = family.graph.title;
       return;
@@ -239,15 +260,18 @@ function render(): void {
     case 'down': {
       const { person } = route;
       const label = route.kind === 'up' ? t().ancestorsOf(shortName(person)) : t().descendantsOf(shortName(person));
-      showTree(subtree(route.kind, person), label, `#/p/${encodeURIComponent(person.id)}`);
+      showTree(subtree(route.kind, person), label, `#/p/${encodeURIComponent(person.id)}`, person.id);
       document.title = `${label} — ${family.graph.title}`;
       return;
     }
   }
 }
 
-/** Puts a tree on screen, with a chip naming what it shows when it is not the whole family. */
-function showTree(overview: OverviewView, label?: string, closeTo = '#/'): void {
+/**
+ * Puts a tree on screen, with a chip naming what it shows when it is not the
+ * whole family. The first time, it opens on `focus` if the tree is too big.
+ */
+function showTree(overview: OverviewView, label?: string, closeTo = '#/', focus?: string): void {
   overview.element.querySelector('.tree-chip')?.remove();
   if (label) {
     const chip = document.createElement('div');
@@ -265,7 +289,7 @@ function showTree(overview: OverviewView, label?: string, closeTo = '#/'): void 
   }
   view.replaceChildren(overview.element);
   overview.markViewer(viewer());
-  overview.activate();
+  overview.activate(focus);
   showGestureHint(overview);
   shownTree = overview;
 }
@@ -559,6 +583,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintTheme
 
 function showGestureHint(overview: OverviewView): void {
   if (readStored('stammbaum-hint') === 'seen') return;
+  // Not behind the "who are you?" sheet, where it would time out unread.
+  if (document.querySelector('dialog[open]')) return;
   const touch = matchMedia('(pointer: coarse)').matches;
   const hint = document.createElement('div');
   hint.className = 'hint alert border-0 bg-neutral text-neutral-content shadow-lg';
@@ -600,6 +626,7 @@ if (family.graph.warnings.length > 0) {
 }
 
 localize();
+welcome();
 render();
 
 function must<T extends Element>(selector: string): T {

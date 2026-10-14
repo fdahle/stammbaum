@@ -7,6 +7,8 @@ import { bubble } from './tile';
 
 export interface PickOptions {
   title: string;
+  /** A line under the title saying what the choice is for. */
+  hint?: string;
   /** Offers "none of them", which resolves to `null`. */
   none?: boolean;
   /** A line under each name — typically what they are to whoever is looking. */
@@ -105,7 +107,14 @@ export function pickPerson(family: Family, options: PickOptions): Promise<Person
       first?.click();
     });
 
-    box.append(header, input, list);
+    box.append(header);
+    if (options.hint) {
+      const hint = document.createElement('p');
+      hint.className = 'picker-hint';
+      hint.textContent = options.hint;
+      box.append(hint);
+    }
+    box.append(input, list);
     if (options.none) {
       const none = document.createElement('button');
       none.type = 'button';

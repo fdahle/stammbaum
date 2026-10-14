@@ -49,6 +49,8 @@ const de = {
   close: 'Schließen',
   pickerPlaceholder: 'Name, Ort, Verwandtschaft …',
   noMatches: 'Niemand gefunden.',
+  seenBy: (name: string) => `aus Sicht von ${name}`,
+  changeViewer: 'Ändern, wer schaut',
 
   fit: 'Ganzen Stammbaum zeigen',
   ancestorsOf: (name: string) => `Vorfahren von ${name}`,
@@ -131,6 +133,8 @@ const en: Dict = {
   close: 'Close',
   pickerPlaceholder: 'Name, place, relationship …',
   noMatches: 'Nobody found.',
+  seenBy: (name) => `as seen by ${name}`,
+  changeViewer: 'Change who is looking',
 
   fit: 'Show the whole tree',
   ancestorsOf: (name) => `Ancestors of ${name}`,
