@@ -1022,8 +1022,14 @@
     max-height: calc(100dvh - 120px);
     border-radius: var(--radius-box);
     object-fit: contain;
-    touch-action: pan-y;
+    /* Pinch, pan and swipe are the lightbox's own gestures. */
+    touch-action: none;
     user-select: none;
+    cursor: zoom-in;
+  }
+
+  .lightbox-image[style*='scale'] {
+    cursor: grab;
   }
 
   .lightbox-counter {
