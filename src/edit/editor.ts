@@ -7,6 +7,7 @@ import { shortName, year } from '../ui/format';
 import { pickPerson } from '../ui/picker';
 import { button, openSheet, sheetActions, type Sheet } from '../ui/sheet';
 import { checkField, choiceField, dateField, INVALID, textField, type Field } from './fields';
+import { cropImage } from './crop';
 import { photoChanges, photoNames, pickImages, shrink } from './photos';
 
 export interface EditorContext {
@@ -208,6 +209,7 @@ export function openEditor(person: Person, context: EditorContext): void {
         const first = [name, ...names.filter((n) => n !== name)];
         actions.append(button(t().makePortrait, 'btn-ghost btn-xs', then(() => void changePhotos(person, first, context))));
       }
+      if (url) actions.append(button(t().crop, 'btn-ghost btn-xs', then(() => void recrop(person, name, url, context))));
       const without = names.filter((n) => n !== name);
       actions.append(button(t().remove, 'btn-ghost btn-xs text-error', then(() => void changePhotos(person, without, context))));
       tile.append(actions);
@@ -253,6 +255,7 @@ export function openEditor(person: Person, context: EditorContext): void {
   if (family.parents(person.id).length < 2) add.append(button(`+ ${t().parent}`, 'btn-soft btn-primary', then(() => openAddRelative('parent', person, context))));
   add.append(button(`+ ${t().partner}`, 'btn-soft btn-primary', then(() => openAddRelative('partner', person, context))));
   add.append(button(`+ ${t().child}`, 'btn-soft btn-primary', then(() => openAddRelative('child', person, context))));
+  add.append(button(`+ ${t().sibling}`, 'btn-soft btn-primary', then(() => openAddRelative('sibling', person, context))));
   relatives.append(add);
   sheet.body.append(relatives);
 
@@ -286,6 +289,13 @@ function reopen(id: string, context: EditorContext): void {
  */
 export async function addPhotos(person: Person, context: EditorContext, thenEdit = false): Promise<void> {
   const files = await pickImages();
+  // One picture gets the circle to choose what shows in the bubble; several go as they are.
+  const [only] = files;
+  if (files.length === 1 && only) {
+    const cropped = await cropImage(only);
+    if (!cropped) return;
+    if (cropped !== 'whole') files[0] = new File([cropped], 'cropped.jpg', { type: cropped.type });
+  }
   const added: string[] = [];
   for (const file of files) {
     const name = await context.upload(await shrink(file), person.id);
@@ -297,6 +307,17 @@ export async function addPhotos(person: Person, context: EditorContext, thenEdit
   const { set, was } = photoChanges(person, names);
   const saved = await context.save([{ kind: 'person', id: person.id, set, was }], t().msg.photosAdded(person.name, added.length));
   if (saved && thenEdit) reopen(person.id, context);
+}
+
+/** A new circle out of a picture someone already has: a new file, in the old one's place. */
+async function recrop(person: Person, name: string, url: string, context: EditorContext): Promise<void> {
+  const original = await fetch(url).then((response) => (response.ok ? response.blob() : undefined)).catch(() => undefined);
+  if (!original) return;
+  const cropped = await cropImage(original);
+  if (!cropped || cropped === 'whole') return reopen(person.id, context);
+  const added = await context.upload(cropped, person.id);
+  if (!added) return;
+  await changePhotos(person, photoNames(person).map((n) => (n === name ? added : n)), context);
 }
 
 /** Gives `person` exactly `names`, the first as the portrait. The files stay in photos/. */
@@ -333,13 +354,13 @@ export function openNewPerson(context: EditorContext, done: (id: string) => void
 
 // ---- adding relatives -------------------------------------------------------
 
-export type Kind = 'parent' | 'partner' | 'child';
+export type Kind = 'parent' | 'partner' | 'child' | 'sibling';
 
 /**
- * A parent, partner or child for `person`: someone new — just name, sex and
- * birth, the rest can follow on their own card — or someone already in the
- * tree. What else it takes depends on the kind: the other parent of a child,
- * how a partnership stands.
+ * A parent, partner, child or sibling for `person`: someone new — just name,
+ * sex and birth, the rest can follow on their own card — or someone already in
+ * the tree. What else it takes depends on the kind: the other parent of a
+ * child, how a partnership stands, which parents siblings share.
  */
 export function openAddRelative(kind: Kind, person: Person, context: EditorContext, preset: { otherParent?: string } = {}): void {
   const { family } = context;
@@ -381,8 +402,31 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
   let adopted: ReturnType<typeof checkField> | undefined;
   let together: ReturnType<typeof checkField> | undefined;
   let partnership: ReturnType<typeof partnershipFields> | undefined;
+  let shared: ReturnType<typeof choiceField<string>> | undefined;
+  let newParents: Array<Field<string | null>> = [];
   const loneParent = family.graph.unions.find((u) => u.children.includes(person.id) && u.partners.length === 1);
-  if (kind === 'child') {
+  if (kind === 'sibling') {
+    // Siblings are children of the same parents: these, or one of them for a half-sibling.
+    const parentUnions = family.graph.unions.filter((u) => u.children.includes(person.id));
+    if (parentUnions.length > 0) {
+      const options = parentUnions.flatMap((union) => [
+        { value: union.partners.join('+'), label: namesOf(family, union.partners) },
+        ...(union.partners.length === 2 ? union.partners.map((id) => ({ value: id, label: t().halfVia(namesOf(family, [id])) })) : []),
+      ]);
+      shared = choiceField(t().sharedParents, options, options[0]!.value);
+      sheet.body.append(shared.element);
+    } else {
+      // No parents yet: they come along, named or as a stand-in to name later.
+      const group = document.createElement('div');
+      group.className = 'form-group';
+      const hint = document.createElement('p');
+      hint.className = 'form-hint';
+      hint.textContent = t().siblingParentsHint(shortName(person));
+      newParents = [textField(t().parentOptional, undefined), textField(t().parentOptional, undefined)];
+      group.append(hint, ...newParents.map((field) => field.element));
+      sheet.body.append(group);
+    }
+  } else if (kind === 'child') {
     const lasting = partners.filter((p) => !unionEnd(p.union) && !['divorced', 'separated'].includes(unionStatus(p.union)));
     const options = [...partners.map((p) => ({ value: p.partner!.id, label: shortName(p.partner!) })), { value: '', label: t().unknownParent }];
     const likely = lasting.at(-1)?.partner?.id ?? partners.at(-1)?.partner?.id ?? '';
@@ -426,6 +470,21 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
         }
         edits.push({ kind: 'add-partnership', partners: [person.id, target!], set: set.set });
         message = t().msg.addedPartner(person.name, name!);
+      } else if (kind === 'sibling') {
+        let parents: string[];
+        if (shared) {
+          parents = shared.value().split('+');
+        } else {
+          const names = newParents.map((field) => field.value()).filter((n): n is string => !!n);
+          if (names.length === 0) names.push(t().parentsOf(shortName(person)));
+          parents = names.map((parentName, i) => {
+            edits.push({ kind: 'add-person', ref: `$parent${i}`, set: { name: parentName }, near: { id: person.id, side: 'before' } });
+            return `$parent${i}`;
+          });
+          edits.push({ kind: 'add-child', parents, child: person.id });
+        }
+        edits.push({ kind: 'add-child', parents, child: target! });
+        message = t().msg.addedSibling(name!, person.name);
       } else {
         if (loneParent && together?.value()) {
           edits.push({ kind: 'remove-child', union: loneParent.id, child: person.id });

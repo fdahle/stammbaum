@@ -260,3 +260,16 @@ describe('pictures', () => {
     expect(applyEdits(markdown, [fresh]).markdown).toContain('photos=a.jpg');
   });
 });
+
+describe('siblings', () => {
+  it('without parents yet, gives both a stand-in parent to share', () => {
+    const file = '```family\nperson felix "Felix Dahle"\nperson carolina "Carolina Dahle"\n```\n';
+    const { markdown, created } = applyEdits(file, [
+      { kind: 'add-person', ref: '$parent0', set: { name: 'Eltern von Felix' }, near: { id: 'felix', side: 'before' } },
+      { kind: 'add-child', parents: ['$parent0'], child: 'felix' },
+      { kind: 'add-child', parents: ['$parent0'], child: 'carolina' },
+    ]);
+    expect(created).toEqual({ $parent0: 'eltern' });
+    expect(markdown).toBe('```family\nperson eltern "Eltern von Felix"\neltern -> felix, carolina\nperson felix "Felix Dahle"\nperson carolina "Carolina Dahle"\n```\n');
+  });
+});

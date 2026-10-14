@@ -841,6 +841,50 @@
     margin-top: 8px;
   }
 
+  /* ---- choosing the circle of a portrait ---------------------------------- */
+
+  .crop-stage {
+    position: relative;
+    width: min(100%, 360px);
+    aspect-ratio: 1;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: var(--radius-box);
+    background: var(--color-base-300);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .crop-stage:active {
+    cursor: grabbing;
+  }
+
+  .crop-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    max-width: none;
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+
+  /* Everything outside the circle dimmed, the circle itself outlined. */
+  .crop-ring {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle closest-side, transparent 99%, rgb(0 0 0 / 0.55) 100%);
+    pointer-events: none;
+  }
+
+  .crop-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgb(255 255 255 / 0.9);
+    border-radius: 50%;
+  }
+
   /* ---- right-click menu on the tree --------------------------------------- */
 
   .context-menu {
@@ -873,6 +917,17 @@
   .context-menu .icon {
     width: 18px;
     height: 18px;
+  }
+
+  .context-menu .context-menu-more {
+    width: 14px;
+    height: 14px;
+    margin-left: auto;
+    color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+  }
+
+  .context-menu-back {
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
   }
 
   .context-menu-danger {

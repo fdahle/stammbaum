@@ -28,12 +28,17 @@ export function treeMenu(target: TreeTarget, context: TreeMenuContext): { title:
     if (!person) return { title: undefined, items: [] };
     const items: MenuItem[] = [{ icon: 'person', label: t().open, action: () => context.open(person.id) }];
     if (editor) {
-      items.push({ icon: 'pencil', label: t().edit, action: () => openEditor(person, editor) });
-      if (family.parents(person.id).length < 2) items.push({ icon: 'up', label: t().addParent, action: () => openAddRelative('parent', person, editor) });
-      items.push(
-        { icon: 'link', label: t().addPartner, action: () => openAddRelative('partner', person, editor) },
-        { icon: 'down', label: t().addChild, action: () => openAddRelative('child', person, editor) },
+      const add: MenuItem[] = [];
+      if (family.parents(person.id).length < 2) add.push({ icon: 'up', label: t().parent, action: () => openAddRelative('parent', person, editor) });
+      add.push(
+        { icon: 'link', label: t().partner, action: () => openAddRelative('partner', person, editor) },
+        { icon: 'down', label: t().child, action: () => openAddRelative('child', person, editor) },
+        { icon: 'swap', label: t().sibling, action: () => openAddRelative('sibling', person, editor) },
         { icon: 'image', label: t().addPhoto, action: () => void addPhotos(person, editor) },
+      );
+      items.push(
+        { icon: 'pencil', label: t().edit, action: () => openEditor(person, editor) },
+        { icon: 'plus', label: t().addMenu, items: add },
         { icon: 'trash', label: t().deletePerson, action: () => confirmDelete(person, editor), danger: true },
       );
     }
