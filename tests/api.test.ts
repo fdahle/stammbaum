@@ -104,6 +104,44 @@ describe('the family api', () => {
     expect(markdown).toContain('job=Koch');
   });
 
+  it('takes uploaded pictures under a free name built from the one asked for', async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    const upload = (body: Buffer, type: string, headers: Record<string, string> = {}) =>
+      fetch(`${base}/api/photos?name=Anna%20Berg`, {
+        method: 'POST',
+        headers: { 'Content-Type': type, 'X-Stammbaum': 'edit', 'Remote-User': 'anna', ...headers },
+        body: new Uint8Array(body),
+      });
+
+    const first = await upload(jpeg, 'image/jpeg');
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ name: 'anna-berg.jpg' });
+    expect(await (await upload(jpeg, 'image/jpeg')).json()).toEqual({ name: 'anna-berg-2.jpg' });
+    expect(await readFile(path.join(dir, 'photos', 'anna-berg.jpg'))).toEqual(jpeg);
+    expect((await fetch(`${base}/api/family`)).ok).toBe(true);
+    expect((await (await fetch(`${base}/api/family`)).json()).photos).toContain('anna-berg-2.jpg');
+    expect(await readFile(path.join(dir, 'history', 'changes.log'), 'utf8')).toContain('\tanna\tFoto anna-berg.jpg hochgeladen\n');
+
+    // Not from the app, not an editor, not a picture, or not what it claims to be.
+    expect((await upload(jpeg, 'image/jpeg', { 'X-Stammbaum': 'nope' })).status).toBe(403);
+    expect((await upload(jpeg, 'image/jpeg', { 'Remote-User': 'cousin' })).status).toBe(403);
+    expect((await upload(Buffer.from('<svg/>'), 'image/svg+xml')).status).toBe(403);
+    expect((await upload(Buffer.from('<html>'), 'image/png')).status).toBe(400);
+    expect((await readdir(path.join(dir, 'photos'))).sort()).toEqual(['Anna.JPG', 'anna-berg-2.jpg', 'anna-berg.jpg']);
+  });
+
+  it('turns away a picture that is too large', async () => {
+    const huge = Buffer.alloc(16 * 1024 * 1024, 0);
+    huge.set([0xff, 0xd8, 0xff]);
+    const response = await fetch(`${base}/api/photos?name=big`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/jpeg', 'X-Stammbaum': 'edit', 'Remote-User': 'anna' },
+      body: new Uint8Array(huge),
+    });
+    expect(response.status).toBe(413);
+    expect(await readdir(path.join(dir, 'photos'))).not.toContain('big.jpg');
+  });
+
   it('serves pictures whatever their case, and nothing outside photos/', async () => {
     expect((await fetch(`${base}/photos/anna.jpg`)).status).toBe(200);
     expect((await fetch(`${base}/photos/..%2Fsecret.txt`)).status).toBe(404);

@@ -9,7 +9,7 @@ import { unionId, type FamilyGraph, type Person, type Union } from './types';
  */
 
 export const PERSON_FIELDS = [
-  'name', 'nick', 'maiden', 'sex', 'born', 'died', 'birthplace', 'deathplace', 'job', 'lives', 'note', 'login',
+  'name', 'nick', 'maiden', 'sex', 'born', 'died', 'birthplace', 'deathplace', 'job', 'lives', 'note', 'login', 'photo', 'photos',
 ] as const;
 export type PersonField = (typeof PERSON_FIELDS)[number];
 
@@ -159,6 +159,12 @@ class Doc {
       inside = inside ? false : fence[1] === 'family';
     });
     if (close !== -1) return close;
+    // An empty file: the block is all there is.
+    if (this.lines.every((line) => line.trim() === '')) {
+      this.lines = ['```family', '```', ''];
+      this.cache = {};
+      return 1;
+    }
     // No block yet: one at the end, before the file's last line break if it has one.
     const at = this.lines.at(-1) === '' ? this.lines.length - 1 : this.lines.length;
     this.lines.splice(at, 0, '', '```family', '```');
@@ -250,15 +256,18 @@ function personLines(doc: Doc, id: string): PersonLine[] {
   });
 }
 
-function fieldOf(person: Person, key: PersonField): string | undefined {
-  return key === 'name' ? person.name : person[key];
+/** A field as the file writes it — `photos` as one comma-separated list. */
+export function personValue(person: Person, key: PersonField): string | undefined {
+  if (key === 'name') return person.name;
+  if (key === 'photos') return person.photos?.length ? person.photos.join(', ') : undefined;
+  return person[key];
 }
 
 function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Changes<PersonField>): void {
   const person = doc.graph().people.get(id);
   if (!person) throw new EditError('conflict', `"${id}" is no longer in the file`);
   for (const [key, value] of Object.entries(was ?? {}) as Array<[PersonField, string | null]>) {
-    if ((fieldOf(person, key) ?? null) !== (value ?? null)) {
+    if ((personValue(person, key) ?? null) !== (value ?? null)) {
       throw new EditError('conflict', `"${id}" was changed in the meantime`);
     }
   }
@@ -303,7 +312,7 @@ function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Chang
 }
 
 /** The order new person lines list their keys in — the order the sample uses. */
-const PERSON_ORDER: PersonField[] = ['sex', 'born', 'died', 'birthplace', 'deathplace', 'maiden', 'nick', 'job', 'lives', 'login', 'note'];
+const PERSON_ORDER: PersonField[] = ['sex', 'born', 'died', 'photo', 'photos', 'birthplace', 'deathplace', 'maiden', 'nick', 'job', 'lives', 'login', 'note'];
 
 function insertPerson(doc: Doc, id: string, set: Changes<PersonField>, at: number): void {
   const parts = [`person ${id}`, quote(set.name ?? id)];

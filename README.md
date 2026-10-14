@@ -55,8 +55,9 @@ app uses.
 | Two-finger pinch | Zoom, around the point between your fingers |
 | Double-tap | Zoom in at that point; again when zoomed in, back out |
 | Tap a bubble | Open that person |
+| Right-click, or press and hold | A menu for what is under it — see below |
 | Mouse wheel, trackpad pinch | Zoom at the cursor |
-| Arrow keys, `+` / `-`, Enter | The same, from the keyboard |
+| Arrow keys, `+` / `-`, Enter, menu key | The same, from the keyboard |
 
 The tree is clamped so it can never be flung off screen, and the button in the
 bottom corner zooms out to the whole family. A tree too wide for the screen
@@ -99,6 +100,31 @@ parents, partners and children, each with what can be done about them, and
 already in the tree. The menu adds people connected to nobody yet. A
 partnership is edited from its row: married or together, since when, and
 whether and when it ended.
+
+The tree itself is quicker. A right-click — a long press on a phone — opens a
+menu for what is under it:
+
+| On | |
+| --- | --- |
+| A person | Open, edit, add a parent, partner or child, add a photo, delete |
+| A line between people | Edit that partnership, add a child to the couple, unlink one of their children |
+| Empty space | Add someone new, show the whole tree |
+
+A family file that is still empty starts with the first person — whoever is
+logged in, with their login filled in.
+
+**Photos** come from the phone or computer: on the edit sheet, or from the menu
+on a person. The browser turns each one upright and shrinks it to 1600 pixels
+across — which also drops what the camera wrote into it, such as where it was
+taken — and the server keeps it in `photos/` as `klaus.jpg`, `klaus-2.jpg`.
+The first becomes the portrait, the rest the gallery; the sheet can make
+another one the portrait or take one out again (the file stays in `photos/`).
+SVG is not taken, since it could carry script. Uploads are logged in
+`changes.log` like edits; the proxy in front has to let bodies of a few
+megabytes through (`client_max_body_size` in [`deploy/`](deploy/)).
+
+The menu's **Die Datei family.md** shows the file as it is, line by line, to
+download or copy.
 
 Every change is written straight into `family.md`, and only where it belongs:
 one word in a person's line, one name added to a `->` list, a new `person` line
@@ -333,7 +359,7 @@ sample/photos/          its placeholder portraits
 src/parser/             markdown → { people, unions, warnings }, and back: write.ts
 src/source/             where the family comes from: the server, or built in
 src/edit/               the editor: forms, and what they turn into
-server/                 the app's server: api/family, api/edits, photos/, history
+server/                 the app's server: api/family, api/edits, api/photos, photos/, history
 src/family.ts           derived lookups: parents, broods, search, subtrees, paths
 src/calendar.ts         upcoming birthdays and anniversaries
 src/stats.ts            the family in numbers

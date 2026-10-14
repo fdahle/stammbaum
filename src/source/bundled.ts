@@ -32,3 +32,7 @@ export async function fetchChanges(): Promise<FamilySource | undefined> {
 export async function saveEdits(_edits: Edit[], _message: string): Promise<Saved> {
   throw new Error('this copy of the family cannot be changed');
 }
+
+export async function uploadPhoto(_image: Blob, _name: string): Promise<string> {
+  throw new Error('this copy of the family cannot be changed');
+}

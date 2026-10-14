@@ -78,6 +78,19 @@
     cursor: grabbing;
   }
 
+  /* A long press opens the tree's own menu, not the phone's. */
+  .tree {
+    -webkit-touch-callout: none;
+  }
+
+  /* Wide and invisible over each line, so a right-click or a finger finds it. */
+  .link-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 16px;
+    pointer-events: stroke;
+  }
+
   .link {
     fill: none;
     stroke: color-mix(in oklab, var(--color-base-content) 22%, transparent);
@@ -722,6 +735,106 @@
     color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
   }
 
+  /* ---- family.md as it is ------------------------------------------------ */
+
+  .source-view {
+    max-width: 960px;
+  }
+
+  .source-code {
+    margin: 8px 0 0;
+    padding: 12px 0;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    counter-reset: line;
+    tab-size: 4;
+  }
+
+  .source-line {
+    display: block;
+    padding-right: 16px;
+    white-space: pre;
+  }
+
+  /* Numbered like the warnings count them. */
+  .source-line::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 3.5em;
+    margin-right: 12px;
+    padding-right: 8px;
+    text-align: right;
+    color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    user-select: none;
+  }
+
+  /* ---- the tree before anyone is in it ----------------------------------- */
+
+  .empty-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 18vh 16px 40px;
+    text-align: center;
+  }
+
+  .empty-view > .icon {
+    width: 56px;
+    height: 56px;
+    color: var(--color-primary);
+  }
+
+  .empty-view .btn {
+    margin-top: 8px;
+  }
+
+  /* ---- right-click menu on the tree --------------------------------------- */
+
+  .context-menu {
+    position: fixed;
+    z-index: 70;
+    min-width: 200px;
+    max-width: calc(100vw - 16px);
+    padding: 6px;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    box-shadow: 0 8px 28px rgb(0 0 0 / 0.18), 0 1px 3px rgb(0 0 0 / 0.12);
+  }
+
+  .context-menu-title {
+    margin: 0;
+    padding: 6px 10px 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .context-menu .menu button {
+    gap: 10px;
+    font-size: 0.875rem;
+  }
+
+  .context-menu .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .context-menu-danger {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--color-base-300);
+  }
+
   /* ---- the family in numbers -------------------------------------------- */
 
   .records {
@@ -1259,6 +1372,45 @@
   .sheet-text {
     margin: 0;
     font-size: 0.9375rem;
+  }
+
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+  }
+
+  .photo-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+  }
+
+  .photo-tile img,
+  .photo-missing {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--radius-field);
+    object-fit: cover;
+    background: var(--color-base-200);
+  }
+
+  .photo-missing {
+    display: grid;
+    place-items: center;
+    padding: 6px;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+    text-align: center;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .photo-tile figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
   }
 
   /* A save on its way: the button cannot be pressed twice. */

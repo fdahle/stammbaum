@@ -1,6 +1,6 @@
 import './styles/app.css';
 
-import { fetchChanges, loadSource, saveEdits } from '@source';
+import { fetchChanges, loadSource, saveEdits, uploadPhoto } from '@source';
 import { upcoming } from './calendar';
 import { photoUrl, readFamily } from './data';
 import { openEditor, openNewPerson, type EditorContext } from './edit/editor';
@@ -14,16 +14,19 @@ import { SaveConflict, type FamilySource } from './source/types';
 import { familyStats } from './stats';
 import { lifespan, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
+import { closeMenu, openMenu } from './ui/menu';
 import { pickPerson } from './ui/picker';
 import { canShare, openShare } from './ui/share';
 import { readStored, writeStored } from './ui/storage';
 import { bubble } from './ui/tile';
 import { renderDates } from './views/dates';
 import { renderMissing } from './views/missing';
-import { OverviewView } from './views/overview';
+import { OverviewView, type TreeTarget } from './views/overview';
 import { renderPerson } from './views/person';
 import { renderRelation, route as relationRoute } from './views/relation';
+import { renderSource } from './views/source';
 import { renderStats } from './views/stats';
+import { treeMenu } from './views/tree-menu';
 
 /**
  * Three-way appearance switch. "system" leaves the choice to the OS: daisyUI's
@@ -176,7 +179,7 @@ async function findRelation(): Promise<void> {
 // ---- routing --------------------------------------------------------------
 
 type Route =
-  | { kind: 'tree' | 'dates' | 'stats' | 'missing' }
+  | { kind: 'tree' | 'dates' | 'stats' | 'missing' | 'file' }
   | { kind: 'up' | 'down' | 'person'; person: Person }
   | { kind: 'relation' | 'path'; a: Person; b: Person };
 
@@ -185,7 +188,7 @@ const DATES_SPAN = 30;
 
 /**
  * `#/`, `#/p/klaus`, `#/up/klaus`, `#/down/klaus`, `#/r/jonas/felix`,
- * `#/path/jonas/felix`, `#/dates`.
+ * `#/path/jonas/felix`, `#/dates`, `#/file`.
  */
 function parseRoute(hash: string): Route | undefined {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -198,7 +201,7 @@ function parseRoute(hash: string): Route | undefined {
   });
   const [kind] = parts;
   if (kind === undefined) return { kind: 'tree' };
-  if ((kind === 'dates' || kind === 'stats' || kind === 'missing') && parts.length === 1) return { kind };
+  if ((kind === 'dates' || kind === 'stats' || kind === 'missing' || kind === 'file') && parts.length === 1) return { kind };
   if (people.some((p) => !p)) return undefined;
   const [a, b] = people as Person[];
   if ((kind === 'p' || kind === 'up' || kind === 'down') && a && !b) {
@@ -210,7 +213,7 @@ function parseRoute(hash: string): Route | undefined {
   return undefined;
 }
 
-let tree = new OverviewView(family, openFromTree);
+let tree = new OverviewView(family, openFromTree, openTreeMenu);
 /** Ancestor and descendant trees, built the first time they are asked for. */
 const subtrees = new Map<string, OverviewView>();
 /** The tree on screen, if a tree is on screen. */
@@ -220,12 +223,29 @@ function openFromTree(id: string): void {
   location.hash = `#/p/${encodeURIComponent(id)}`;
 }
 
+/** Right-click or long press on a tree: what can be done right there. */
+function openTreeMenu(target: TreeTarget, at: { x: number; y: number }): void {
+  const { title, items } = treeMenu(target, {
+    family,
+    editor: source.editable ? editorContext() : undefined,
+    open: openFromTree,
+    added: showAdded,
+    fit: () => (shownTree ?? tree).fit(),
+  });
+  openMenu(at, title, items);
+}
+
+/** Someone new on the tree: brought into view and ringed, so the next step starts there. */
+function showAdded(id: string): void {
+  if (shownTree?.has(id)) shownTree.highlight(id);
+}
+
 function subtree(kind: 'up' | 'down', person: Person): OverviewView {
   const key = `${kind}/${person.id}`;
   let overview = subtrees.get(key);
   if (!overview) {
     const graph = kind === 'up' ? family.ancestorsGraph(person.id) : family.descendantsGraph(person.id);
-    overview = new OverviewView(new Family(graph), openFromTree);
+    overview = new OverviewView(new Family(graph), openFromTree, openTreeMenu);
     subtrees.set(key, overview);
   }
   return overview;
@@ -234,6 +254,7 @@ function subtree(kind: 'up' | 'down', person: Person): OverviewView {
 function render(): void {
   closeResults();
   closeSearch();
+  closeMenu();
   const route = parseRoute(location.hash);
   if (!route) {
     location.replace('#/');
@@ -286,7 +307,20 @@ function render(): void {
       document.querySelector('.warnings')?.remove();
       showPage(renderMissing(gaps(family, (p) => !!photoUrl(p), today()), family.graph.warnings), t().missing);
       return;
+    case 'file':
+      showPage(renderSource(source.markdown), 'family.md');
+      return;
     case 'tree':
+      if (family.people().length === 0) {
+        view.replaceChildren(renderEmpty());
+        document.title = family.graph.title;
+        // A family that does not exist yet starts with its first person.
+        if (source.editable && !offeredStart && !document.querySelector('dialog[open]')) {
+          offeredStart = true;
+          startFamily();
+        }
+        return;
+      }
       showTree(tree, undefined, undefined, viewer());
       tree.emphasize(undefined);
       document.title = family.graph.title;
@@ -307,6 +341,36 @@ function render(): void {
       return;
     }
   }
+}
+
+/** Whether the first person has been asked for once already — closing the sheet means "not now". */
+let offeredStart = false;
+
+function startFamily(): void {
+  // Whoever starts the family is likely its first person: their login comes filled in.
+  openNewPerson(editorContext(), showAdded, loginName());
+}
+
+/** The tree before there is anyone in it. */
+function renderEmpty(): HTMLElement {
+  const root = document.createElement('article');
+  root.className = 'empty-view';
+  const heading = document.createElement('h1');
+  heading.className = 'page-title';
+  heading.textContent = t().emptyTitle;
+  const text = document.createElement('p');
+  text.className = 'page-hint';
+  text.textContent = source.editable ? t().emptyText : t().emptyReadOnly;
+  root.append(icon('tree'), heading, text);
+  if (source.editable) {
+    const start = document.createElement('button');
+    start.type = 'button';
+    start.className = 'btn btn-primary';
+    start.append(icon('plus'), t().emptyStart);
+    start.addEventListener('click', startFamily);
+    root.append(start);
+  }
+  return root;
 }
 
 /** Puts one of the list pages on screen. */
@@ -506,6 +570,7 @@ function renderMenu(): void {
   entry('cake', t().datesTitle, '#/dates');
   entry('chart', t().stats, '#/stats');
   entry('checklist', t().missing, '#/missing');
+  entry('file', t().viewFile, '#/file');
   if (source.editable) {
     entry('plus', t().addPerson, () =>
       openNewPerson(editorContext(), (id) => (location.hash = `#/p/${encodeURIComponent(id)}`)),
@@ -588,7 +653,9 @@ function fileName(title: string): string {
 }
 
 /** A short message at the bottom of the screen that goes away on its own. */
-function toast(text: string, kind: 'error' | 'success' = 'error'): void {
+function toast(text: string, kind: 'error' | 'success' | 'info' = 'error'): void {
+  // One at a time: "uploading" gives way to "saved".
+  for (const earlier of document.querySelectorAll('.toast-note')) earlier.remove();
   const element = document.createElement('div');
   element.className = `toast-note alert alert-${kind} shadow-lg`;
   element.setAttribute('role', 'status');
@@ -600,7 +667,26 @@ function toast(text: string, kind: 'error' | 'success' = 'error'): void {
 // ---- editing ----------------------------------------------------------------
 
 function editorContext(): EditorContext {
-  return { family, save, caption };
+  return {
+    // Read at the moment it is needed: after a save, the new family.
+    get family() {
+      return family;
+    },
+    save,
+    upload,
+    caption,
+  };
+}
+
+async function upload(image: Blob, name: string): Promise<string | undefined> {
+  toast(t().uploading, 'info');
+  try {
+    return await uploadPhoto(image, name);
+  } catch (error) {
+    console.error(error);
+    toast(t().uploadError);
+    return undefined;
+  }
 }
 
 /**
@@ -633,7 +719,10 @@ function useSource(next: FamilySource): void {
   source = next;
   family = new Family(readFamily(next));
   title.textContent = family.graph.title;
-  tree = new OverviewView(family, openFromTree);
+  const before = tree;
+  tree = new OverviewView(family, openFromTree, openTreeMenu);
+  // The same family a moment later: stay where one was looking.
+  tree.keepViewOf(before);
   subtrees.clear();
   refresh();
 }

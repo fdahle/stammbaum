@@ -79,7 +79,7 @@ describe('editing a person', () => {
   it('refuses nonsense', () => {
     expect(() => apply({ kind: 'person', id: 'klaus', set: { sex: 'x' } })).toThrow(/sex/);
     expect(() => apply({ kind: 'person', id: 'klaus', set: { name: '' } })).toThrow(/name/);
-    expect(() => apply({ kind: 'person', id: 'klaus', set: { photo: 'x.jpg' } as never })).toThrow(/cannot be changed/);
+    expect(() => apply({ kind: 'person', id: 'klaus', set: { colour: 'blue' } as never })).toThrow(/cannot be changed/);
     expect(() => apply({ kind: 'person', id: 'nobody', set: { job: 'x' } })).toThrow(/no longer/);
   });
 
@@ -235,5 +235,28 @@ describe('a file that only exists once it is written to', () => {
     const { markdown } = applyEdits('# Neu\n', [{ kind: 'add-person', ref: '$a', set: { name: 'Anna' } }]);
     expect(markdown).toBe('# Neu\n\n```family\nperson anna Anna\n```\n');
     expect(parseFamily(markdown).people.get('anna')?.name).toBe('Anna');
+  });
+
+  it('starts an empty file with the block and nothing before it', () => {
+    const { markdown } = applyEdits('', [{ kind: 'add-person', ref: '$a', set: { name: 'Anna' } }]);
+    expect(markdown).toBe('```family\nperson anna Anna\n```\n');
+  });
+});
+
+describe('pictures', () => {
+  it('writes a portrait and a gallery list the parser reads back', () => {
+    const { markdown } = apply({ kind: 'person', id: 'klaus', set: { photo: 'klaus.jpg', photos: 'klaus-2.jpg, klaus 3.jpg' } });
+    expect(changed(markdown).added).toEqual(['person klaus    "Klaus Bauer"   sex=m born=1958 photo=klaus.jpg photos="klaus-2.jpg, klaus 3.jpg"']);
+    const klaus = parseFamily(markdown).people.get('klaus')!;
+    expect(klaus.photo).toBe('klaus.jpg');
+    expect(klaus.photos).toEqual(['klaus-2.jpg', 'klaus 3.jpg']);
+  });
+
+  it('notices a gallery that changed in the meantime', () => {
+    const { markdown } = apply({ kind: 'person', id: 'klaus', set: { photos: 'a.jpg, b.jpg' } });
+    const stale: Edit = { kind: 'person', id: 'klaus', set: { photos: 'a.jpg' }, was: { photos: 'a.jpg, c.jpg' } };
+    expect(() => applyEdits(markdown, [stale])).toThrow(EditError);
+    const fresh: Edit = { kind: 'person', id: 'klaus', set: { photos: 'a.jpg' }, was: { photos: 'a.jpg, b.jpg' } };
+    expect(applyEdits(markdown, [fresh]).markdown).toContain('photos=a.jpg');
   });
 });

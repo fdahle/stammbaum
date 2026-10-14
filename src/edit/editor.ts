@@ -1,18 +1,26 @@
+import { photoByName } from '../data';
 import type { Family } from '../family';
 import { t } from '../i18n';
 import { isDeceased, knownDate, unionEnd, unionStart, unionStatus, type Person, type Union } from '../parser/types';
-import { PERSON_FIELDS, type Changes, type Edit, type PersonField, type UnionField } from '../parser/write';
+import { PERSON_FIELDS, personValue, type Changes, type Edit, type PersonField, type UnionField } from '../parser/write';
 import { shortName, year } from '../ui/format';
 import { pickPerson } from '../ui/picker';
 import { button, openSheet, sheetActions, type Sheet } from '../ui/sheet';
 import { checkField, choiceField, dateField, INVALID, textField, type Field } from './fields';
+import { photoChanges, photoNames, pickImages, shrink } from './photos';
 
 export interface EditorContext {
-  family: Family;
+  /** The family as it is now — after a save, already the new one. */
+  readonly family: Family;
   /** Saves and shows the result; resolves to the ids new people got, or `undefined` when it failed. */
   save(edits: Edit[], message: string): Promise<Record<string, string> | undefined>;
+  /** Puts a picture into photos/ under a name built from `name`; resolves to the file name, or `undefined` when it failed. */
+  upload(image: Blob, name: string): Promise<string | undefined>;
   caption(person: Person): string | undefined;
 }
+
+/** What the person form asks for; the pictures have their own section. */
+const FORM_FIELDS = PERSON_FIELDS.filter((key) => key !== 'photo' && key !== 'photos');
 
 // ---- the person form --------------------------------------------------------
 
@@ -104,8 +112,8 @@ function personForm(person: Person | undefined, short = false): PersonForm {
 function personChanges(person: Person, values: Record<PersonField, string | null>, only?: PersonField[]): { set: Changes<PersonField>; was: Changes<PersonField> } {
   const set: Changes<PersonField> = {};
   const was: Changes<PersonField> = {};
-  for (const key of only ?? PERSON_FIELDS) {
-    const before = (key === 'name' ? person.name : person[key]) ?? null;
+  for (const key of only ?? FORM_FIELDS) {
+    const before = personValue(person, key) ?? null;
     if (values[key] !== before) {
       set[key] = values[key];
       was[key] = before;
@@ -163,13 +171,58 @@ export function openEditor(person: Person, context: EditorContext): void {
   });
   sheet.body.append(form.element, sheetActions(saveButton));
 
+  const then = (next: () => void) => () => {
+    sheet.close();
+    next();
+  };
+
+  // Pictures, the portrait first: each can become the portrait, or go.
+  const pictures = section(t().photos);
+  const names = photoNames(person);
+  if (names.length > 0) {
+    const grid = document.createElement('div');
+    grid.className = 'photo-grid';
+    names.forEach((name, index) => {
+      const tile = document.createElement('figure');
+      tile.className = 'photo-tile';
+      const url = photoByName(name);
+      if (url) {
+        const image = document.createElement('img');
+        image.src = url;
+        image.alt = '';
+        image.loading = 'lazy';
+        tile.append(image);
+      } else {
+        const missing = document.createElement('span');
+        missing.className = 'photo-missing';
+        missing.textContent = name;
+        tile.append(missing);
+      }
+      const actions = document.createElement('figcaption');
+      if (index === 0 && person.photo) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-sm badge-soft badge-primary';
+        badge.textContent = t().portrait;
+        actions.append(badge);
+      } else {
+        const first = [name, ...names.filter((n) => n !== name)];
+        actions.append(button(t().makePortrait, 'btn-ghost btn-xs', then(() => void changePhotos(person, first, context))));
+      }
+      const without = names.filter((n) => n !== name);
+      actions.append(button(t().remove, 'btn-ghost btn-xs text-error', then(() => void changePhotos(person, without, context))));
+      tile.append(actions);
+      grid.append(tile);
+    });
+    pictures.append(grid);
+  }
+  const addPicture = document.createElement('div');
+  addPicture.className = 'relative-add';
+  addPicture.append(button(`+ ${t().addPhoto}`, 'btn-soft btn-primary', then(() => void addPhotos(person, context, true))));
+  pictures.append(addPicture);
+  sheet.body.append(pictures);
+
   // Relatives, each a row with what can be done about them.
-  const relatives = document.createElement('section');
-  relatives.className = 'sheet-section';
-  const heading = document.createElement('h3');
-  heading.className = 'settings-label';
-  heading.textContent = t().relatives;
-  relatives.append(heading);
+  const relatives = section(t().relatives);
 
   const row = (text: string, ...actions: HTMLButtonElement[]) => {
     const line = document.createElement('div');
@@ -178,10 +231,6 @@ export function openEditor(person: Person, context: EditorContext): void {
     label.textContent = text;
     line.append(label, ...actions);
     relatives.append(line);
-  };
-  const then = (next: () => void) => () => {
-    sheet.close();
-    next();
   };
 
   const parentUnions = family.graph.unions.filter((u) => u.children.includes(person.id));
@@ -213,10 +262,60 @@ export function openEditor(person: Person, context: EditorContext): void {
   sheet.body.append(danger);
 }
 
-/** Someone new, connected to nobody yet — from the menu. */
-export function openNewPerson(context: EditorContext, done: (id: string) => void): void {
+function section(title: string): HTMLElement {
+  const element = document.createElement('section');
+  element.className = 'sheet-section';
+  const heading = document.createElement('h3');
+  heading.className = 'settings-label';
+  heading.textContent = title;
+  element.append(heading);
+  return element;
+}
+
+/** The editor again, with `id` as the file has them now — after a change made from inside it. */
+function reopen(id: string, context: EditorContext): void {
+  const person = context.family.person(id);
+  if (person) openEditor(person, context);
+}
+
+// ---- pictures ---------------------------------------------------------------
+
+/**
+ * New pictures for `person`, chosen on the device: each uploaded, then all
+ * added in one change — the first as the portrait if there is none yet.
+ */
+export async function addPhotos(person: Person, context: EditorContext, thenEdit = false): Promise<void> {
+  const files = await pickImages();
+  const added: string[] = [];
+  for (const file of files) {
+    const name = await context.upload(await shrink(file), person.id);
+    if (!name) break;
+    added.push(name);
+  }
+  if (added.length === 0) return;
+  const names = person.photo ? [...photoNames(person), ...added] : [added[0]!, ...(person.photos ?? []), ...added.slice(1)];
+  const { set, was } = photoChanges(person, names);
+  const saved = await context.save([{ kind: 'person', id: person.id, set, was }], t().msg.photosAdded(person.name, added.length));
+  if (saved && thenEdit) reopen(person.id, context);
+}
+
+/** Gives `person` exactly `names`, the first as the portrait. The files stay in photos/. */
+async function changePhotos(person: Person, names: string[], context: EditorContext): Promise<void> {
+  const { set, was } = photoChanges(person, names);
+  if (Object.keys(set).length === 0) return;
+  if (await context.save([{ kind: 'person', id: person.id, set, was }], t().msg.photosChanged(person.name))) reopen(person.id, context);
+}
+
+// ---- someone new ------------------------------------------------------------
+
+/**
+ * Someone new, connected to nobody yet — from the menu. `login` fills in the
+ * login name ahead: the first person of a new family is usually whoever is
+ * starting it.
+ */
+export function openNewPerson(context: EditorContext, done: (id: string) => void, login?: string): void {
   const sheet = openSheet(t().newPerson);
-  const form = personForm(undefined);
+  const form = personForm(login ? { id: '', name: '', login } : undefined);
   const add = button(t().add, 'btn-primary', () => {
     void submit(sheet, add, async () => {
       const values = form.read();
@@ -234,7 +333,7 @@ export function openNewPerson(context: EditorContext, done: (id: string) => void
 
 // ---- adding relatives -------------------------------------------------------
 
-type Kind = 'parent' | 'partner' | 'child';
+export type Kind = 'parent' | 'partner' | 'child';
 
 /**
  * A parent, partner or child for `person`: someone new — just name, sex and
@@ -242,7 +341,7 @@ type Kind = 'parent' | 'partner' | 'child';
  * tree. What else it takes depends on the kind: the other parent of a child,
  * how a partnership stands.
  */
-function openAddRelative(kind: Kind, person: Person, context: EditorContext): void {
+export function openAddRelative(kind: Kind, person: Person, context: EditorContext, preset: { otherParent?: string } = {}): void {
   const { family } = context;
   const sheet = openSheet(t().addTitle[kind](shortName(person)));
   const form = personForm(undefined, true);
@@ -286,7 +385,9 @@ function openAddRelative(kind: Kind, person: Person, context: EditorContext): vo
   if (kind === 'child') {
     const lasting = partners.filter((p) => !unionEnd(p.union) && !['divorced', 'separated'].includes(unionStatus(p.union)));
     const options = [...partners.map((p) => ({ value: p.partner!.id, label: shortName(p.partner!) })), { value: '', label: t().unknownParent }];
-    otherParent = choiceField(t().otherParent, options, lasting.at(-1)?.partner?.id ?? partners.at(-1)?.partner?.id ?? '');
+    const likely = lasting.at(-1)?.partner?.id ?? partners.at(-1)?.partner?.id ?? '';
+    const asked = preset.otherParent;
+    otherParent = choiceField(t().otherParent, options, asked !== undefined && options.some((o) => o.value === asked) ? asked : likely);
     adopted = checkField(t().adopted, false);
     sheet.body.append(otherParent.element, adopted.element);
   } else if (kind === 'partner') {
@@ -416,7 +517,7 @@ function partnershipFields(union: Union | undefined) {
   };
 }
 
-function openPartnership(union: Union, context: EditorContext): void {
+export function openPartnership(union: Union, context: EditorContext): void {
   const names = namesOf(context.family, union.partners);
   const sheet = openSheet(names);
   const fields = partnershipFields(union);
@@ -452,14 +553,14 @@ function confirm(title: string, text: string, label: string, run: () => Promise<
   sheet.body.append(paragraph, sheetActions(go, button(t().cancel, 'btn-ghost', () => sheet.close())));
 }
 
-function confirmUnlink(union: Union, child: Person, context: EditorContext): void {
+export function confirmUnlink(union: Union, child: Person, context: EditorContext): void {
   const parents = namesOf(context.family, union.partners);
   confirm(t().unlink, t().unlinkText(child.name, parents), t().unlink, () =>
     context.save([{ kind: 'remove-child', union: union.id, child: child.id }], t().msg.unlinked(child.name, parents)),
   );
 }
 
-function confirmDelete(person: Person, context: EditorContext): void {
+export function confirmDelete(person: Person, context: EditorContext): void {
   const { family } = context;
   const links =
     family.parents(person.id).length + family.children(person.id).length + family.partnerships(person.id).filter((p) => p.partner).length;
@@ -470,7 +571,7 @@ function confirmDelete(person: Person, context: EditorContext): void {
 
 // ---- words ------------------------------------------------------------------
 
-function namesOf(family: Family, ids: string[]): string {
+export function namesOf(family: Family, ids: string[]): string {
   return ids.map((id) => {
     const person = family.person(id);
     return person ? shortName(person) : id;

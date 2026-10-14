@@ -44,3 +44,15 @@ export async function saveEdits(edits: Edit[], message: string): Promise<Saved> 
   etag = null;
   return { source: toSource(body.family), created: body.created ?? {} };
 }
+
+/** Puts a picture into photos/; resolves to the file name it got there. */
+export async function uploadPhoto(image: Blob, name: string): Promise<string> {
+  const response = await fetch(url(`api/photos?name=${encodeURIComponent(name)}`), {
+    method: 'POST',
+    headers: { 'Content-Type': image.type, 'X-Stammbaum': 'edit' },
+    body: image,
+  });
+  const body = (await response.json().catch(() => ({}))) as { name?: string; error?: string };
+  if (!response.ok || !body.name) throw new Error(body.error ?? `api/photos: ${response.status}`);
+  return body.name;
+}

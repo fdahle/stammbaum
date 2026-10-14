@@ -28,7 +28,7 @@ export function familyStamp(): FamilySource['stamp'] {
 }
 
 /** `photo=heinrich.jpg` finds Heinrich.JPG as well. */
-function photoByName(name: string): string | undefined {
+export function photoByName(name: string): string | undefined {
   return photos.get(name.toLowerCase());
 }
 

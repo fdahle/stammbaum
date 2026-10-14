@@ -13,6 +13,8 @@ const MAX_SCALE = 2.5;
 const READABLE_SCALE = 0.5;
 const DOUBLE_TAP_MS = 320;
 const TAP_SLOP = 10;
+/** How long a finger rests on the tree before that counts as a right-click. */
+const LONG_PRESS_MS = 500;
 /** Room under the lowest row for the build stamp. */
 const STAMP_SPACE = 32;
 
@@ -21,6 +23,12 @@ interface View {
   x: number;
   y: number;
 }
+
+/** What a right-click or a long press on the tree was on. */
+export type TreeTarget = { kind: 'person'; id: string } | { kind: 'union'; id: string } | { kind: 'canvas' };
+
+/** Asks for the menu of `target`, at a point in the window. */
+export type ContextHandler = (target: TreeTarget, at: { x: number; y: number }) => void;
 
 /**
  * The whole tree in one SVG, driven entirely by gestures: drag to pan, pinch to
@@ -48,6 +56,7 @@ export class OverviewView {
   constructor(
     private readonly family: Family,
     private readonly onSelect: (id: string) => void,
+    private readonly onContext?: ContextHandler,
   ) {
     this.layout = layoutFamily(family.graph);
     this.height = this.layout.height + STAMP_SPACE;
@@ -119,6 +128,15 @@ export class OverviewView {
     this.focus = focus;
     if (this.positioned) this.apply();
     else this.frame();
+  }
+
+  /**
+   * Takes over where `other` was looking — for the same family after a
+   * change, so an edit does not throw the view back to the start.
+   */
+  keepViewOf(other: OverviewView): void {
+    this.view = { ...other.view };
+    this.positioned = other.positioned;
   }
 
   /** Forgets where the view was left, so the next `activate` opens afresh. */
@@ -269,6 +287,12 @@ export class OverviewView {
     let velocity = { x: 0, y: 0 };
     let lastMove = 0;
     let lastTap = { t: 0, x: 0, y: 0 };
+    let longPress = 0;
+    /** A long press opened the menu: letting go is not a tap. */
+    let held = false;
+    /** Touch brings its own long press; the browser's contextmenu for it is ignored. */
+    let lastPointer = '';
+    let keyboardMenu = 0;
 
     const local = (event: { clientX: number; clientY: number }) => {
       const box = this.svg.getBoundingClientRect();
@@ -276,6 +300,9 @@ export class OverviewView {
     };
 
     this.svg.addEventListener('pointerdown', (event) => {
+      lastPointer = event.pointerType;
+      // The right button is for the menu, not for panning or picking.
+      if (event.button !== 0) return;
       this.stopMomentum();
       cancelAnimationFrame(this.animation);
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -295,6 +322,18 @@ export class OverviewView {
       // Pointer capture retargets later events at the <svg>, so remember now
       // what was actually pressed.
       pressed = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+
+      held = false;
+      clearTimeout(longPress);
+      if (event.pointerType !== 'mouse' && pointers.size === 1 && this.onContext) {
+        const at = { x: event.clientX, y: event.clientY };
+        longPress = window.setTimeout(() => {
+          if (travelled >= TAP_SLOP || pointers.size !== 1) return;
+          held = true;
+          navigator.vibrate?.(10);
+          this.openContext(at.x, at.y);
+        }, LONG_PRESS_MS);
+      }
     });
 
     this.svg.addEventListener('pointermove', (event) => {
@@ -315,12 +354,14 @@ export class OverviewView {
         pinch = next;
         centre = nextCentre;
         travelled = Infinity;
+        clearTimeout(longPress);
         return;
       }
 
       const dx = event.clientX - previous.x;
       const dy = event.clientY - previous.y;
       travelled += Math.hypot(dx, dy);
+      if (travelled >= TAP_SLOP) clearTimeout(longPress);
       const dt = Math.max(event.timeStamp - lastMove, 1);
       lastMove = event.timeStamp;
       velocity = { x: mix(velocity.x, dx / dt, 0.35), y: mix(velocity.y, dy / dt, 0.35) };
@@ -329,10 +370,16 @@ export class OverviewView {
     });
 
     const release = (event: PointerEvent) => {
-      pointers.delete(event.pointerId);
+      if (!pointers.delete(event.pointerId)) return;
+      clearTimeout(longPress);
       if (pointers.size < 2) pinch = 0;
       if (pointers.size > 0) return;
       this.element.classList.remove('is-panning');
+      if (held) {
+        held = false;
+        pressed = undefined;
+        return;
+      }
 
       if (travelled < TAP_SLOP) {
         if (pressed) {
@@ -369,14 +416,29 @@ export class OverviewView {
       { passive: false },
     );
 
-    // Long-press on a bubble should not raise the browser's own menu.
-    this.svg.addEventListener('contextmenu', (event) => event.preventDefault());
+    // The tree's own menu instead of the browser's.
+    this.svg.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      if (!this.onContext || performance.now() - keyboardMenu < 500) return;
+      if (lastPointer === 'touch' || lastPointer === 'pen') return;
+      this.openContext(event.clientX, event.clientY);
+    });
 
     this.svg.addEventListener('keydown', (event) => {
-      const id = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+      lastPointer = '';
+      const node = (event.target as Element | null)?.closest<SVGGElement>('.node');
+      const id = node?.dataset.id;
       if (id && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault();
         this.onSelect(id);
+        return;
+      }
+      if (this.onContext && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+        event.preventDefault();
+        keyboardMenu = performance.now();
+        const box = (node ?? this.svg).getBoundingClientRect();
+        const at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        this.onContext(id ? { kind: 'person', id } : { kind: 'canvas' }, at);
         return;
       }
       const pan: Record<string, [number, number]> = {
@@ -396,6 +458,15 @@ export class OverviewView {
         this.zoomAround(event.key === '+' ? 1.3 : 1 / 1.3, box.width / 2, box.height / 2);
       }
     });
+  }
+
+  /** The menu for whatever is under a point in the window: a person, a line between people, or nothing. */
+  private openContext(x: number, y: number): void {
+    const hit = document.elementFromPoint(x, y);
+    const id = hit?.closest<SVGGElement>('.node')?.dataset.id;
+    const union = hit?.closest<SVGElement>('[data-union]')?.dataset.union;
+    const target: TreeTarget = id ? { kind: 'person', id } : union ? { kind: 'union', id: union } : { kind: 'canvas' };
+    this.onContext?.(target, { x, y });
   }
 
   private doubleTap(x: number, y: number): void {
@@ -487,6 +558,7 @@ export class OverviewView {
       copy.setAttribute('style', inline.filter(Boolean).join('; '));
       for (const attribute of ['class', 'tabindex', 'role']) copy.removeAttribute(attribute);
     });
+    for (const hit of clone.querySelectorAll('[data-union]')) hit.remove();
     // The title gets a band of its own above the tree.
     const width = this.layout.width;
     const height = this.height + TITLE_SPACE;
@@ -553,6 +625,15 @@ export class OverviewView {
 
   private drawLinks(): SVGGElement {
     const group = svgEl('g', { class: 'links' });
+    // Wide, invisible copies of the lines on top, so a line is easy to hit
+    // with a right-click or a finger; each knows its partnership.
+    const hits = svgEl('g', { class: 'link-hits' });
+    const hit = (union: UnionEdge, element: SVGElement) => {
+      const copy = element.cloneNode() as SVGElement;
+      copy.setAttribute('class', 'link-hit');
+      copy.dataset.union = union.id;
+      hits.append(copy);
+    };
     const lanes = assignLanes(this.layout);
     // A couple who married twice share one line, drawn for the latest marriage
     // and labelled with both.
@@ -587,6 +668,7 @@ export class OverviewView {
         } else {
           group.append(svgEl('line', { class: cls, x1, y1: left.y, x2, y2: right.y }));
         }
+        hit(union, svgEl('line', { x1, y1: left.y, x2, y2: right.y }));
         const label = couple.map(unionLabel).filter(Boolean).join(' · ');
         if (label) {
           const text = svgEl('text', {
@@ -606,21 +688,22 @@ export class OverviewView {
 
       const busY = union.y + METRICS.rowHeight - 92 + (lanes.get(union.id) ?? 0) * 15;
       const xs = children.map((c) => c.x);
-      group.append(
-        svgEl('path', {
-          class: 'link link-descent',
-          d: [
-            // The children hang off the rings when there are any, off the
-            // partner line otherwise.
-            `M ${union.x} ${union.y + (rings ? RINGS.radius : partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
-            `L ${union.x} ${busY}`,
-            `M ${Math.min(...xs, union.x)} ${busY}`,
-            `L ${Math.max(...xs, union.x)} ${busY}`,
-            ...children.map((c) => `M ${c.x} ${busY} L ${c.x} ${c.y - METRICS.bubbleRadius - 4}`),
-          ].join(' '),
-        }),
-      );
+      const descent = svgEl('path', {
+        class: 'link link-descent',
+        d: [
+          // The children hang off the rings when there are any, off the
+          // partner line otherwise.
+          `M ${union.x} ${union.y + (rings ? RINGS.radius : partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
+          `L ${union.x} ${busY}`,
+          `M ${Math.min(...xs, union.x)} ${busY}`,
+          `L ${Math.max(...xs, union.x)} ${busY}`,
+          ...children.map((c) => `M ${c.x} ${busY} L ${c.x} ${c.y - METRICS.bubbleRadius - 4}`),
+        ].join(' '),
+      });
+      group.append(descent);
+      hit(union, descent);
     }
+    group.append(hits);
     return group;
   }
 
