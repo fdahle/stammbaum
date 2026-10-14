@@ -697,6 +697,7 @@ async function upload(image: Blob, name: string): Promise<string | undefined> {
 async function save(edits: Edit[], message: string): Promise<Record<string, string> | undefined> {
   try {
     const saved = await saveEdits(edits, message);
+    followRenames(saved.renamed);
     useSource(saved.source);
     toast(t().saved, 'success');
     return saved.created;
@@ -712,6 +713,22 @@ async function save(edits: Edit[], message: string): Promise<Record<string, stri
     }
     return undefined;
   }
+}
+
+/** Someone's id changed: the page on screen and who is looking follow, so nothing points at the old one. */
+function followRenames(renamed: Record<string, string>): void {
+  if (Object.keys(renamed).length === 0) return;
+  const parts = location.hash.split('/').map((part) => {
+    try {
+      const now = renamed[decodeURIComponent(part)];
+      return now ? encodeURIComponent(now) : part;
+    } catch {
+      return part;
+    }
+  });
+  history.replaceState(null, '', parts.join('/') || '#/');
+  const me = readStored('stammbaum-me');
+  if (me && renamed[me]) writeStored('stammbaum-me', renamed[me]);
 }
 
 /** Puts a new version of the family on screen, wherever one was looking. */

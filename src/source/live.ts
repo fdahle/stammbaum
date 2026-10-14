@@ -38,11 +38,16 @@ export async function saveEdits(edits: Edit[], message: string): Promise<Saved> 
     headers: { 'Content-Type': 'application/json', 'X-Stammbaum': 'edit' },
     body: JSON.stringify({ edits, message }),
   });
-  const body = (await response.json().catch(() => ({}))) as { family?: FamilyPayload; created?: Record<string, string>; error?: string };
+  const body = (await response.json().catch(() => ({}))) as {
+    family?: FamilyPayload;
+    created?: Record<string, string>;
+    renamed?: Record<string, string>;
+    error?: string;
+  };
   if (response.status === 409 && body.family) throw new SaveConflict(toSource(body.family), body.error ?? 'conflict');
   if (!response.ok || !body.family) throw new Error(body.error ?? `api/edits: ${response.status}`);
   etag = null;
-  return { source: toSource(body.family), created: body.created ?? {} };
+  return { source: toSource(body.family), created: body.created ?? {}, renamed: body.renamed ?? {} };
 }
 
 /** Puts a picture into photos/; resolves to the file name it got there. */

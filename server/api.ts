@@ -119,7 +119,7 @@ export function familyApi(options: ApiOptions): (request: IncomingMessage, respo
     const message = String(body.message ?? 'Änderung').replace(/\s+/g, ' ').trim().slice(0, 200);
 
     const before = await readFile(file, 'utf8').catch(() => '');
-    let result: { markdown: string; created: Record<string, string> };
+    let result: ReturnType<typeof applyEdits>;
     try {
       result = applyEdits(before, body.edits as Edit[]);
     } catch (error) {
@@ -135,7 +135,7 @@ export function familyApi(options: ApiOptions): (request: IncomingMessage, respo
       await writeFile(temporary, result.markdown, 'utf8');
       await rename(temporary, file);
     }
-    json(response, 200, { family: await payload(user), created: result.created });
+    json(response, 200, { family: await payload(user), created: result.created, renamed: result.renamed });
   };
 
   /**

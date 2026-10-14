@@ -32,7 +32,8 @@ export type Edit =
   | { kind: 'remove-child'; union: string; child: string }
   | { kind: 'add-partnership'; partners: string[]; set: Changes<UnionField> }
   | { kind: 'partnership'; union: string; set: Changes<UnionField>; was?: Changes<UnionField> }
-  | { kind: 'delete-partnership'; union: string };
+  | { kind: 'delete-partnership'; union: string }
+  | { kind: 'rename-id'; id: string; to: string };
 
 export class EditError extends Error {
   constructor(
@@ -45,12 +46,26 @@ export class EditError extends Error {
   }
 }
 
-/** Applies `edits` in order; `created` maps each `$ref` to the id it was given. */
-export function applyEdits(markdown: string, edits: Edit[]): { markdown: string; created: Record<string, string> } {
+/**
+ * Applies `edits` in order. `created` maps each `$ref` to the id it was
+ * given; `renamed` each id that changed to the one it has now — a renamed
+ * person whose id came from their old name takes one from the new.
+ */
+export function applyEdits(
+  markdown: string,
+  edits: Edit[],
+): { markdown: string; created: Record<string, string>; renamed: Record<string, string> } {
   const doc = new Doc(markdown);
   const created: Record<string, string> = {};
+  const renamed: Record<string, string> = {};
+  const rename = (from: string, to: string) => {
+    renameId(doc, from, to);
+    for (const [old, now] of Object.entries(renamed)) if (now === from) renamed[old] = to;
+    renamed[from] = to;
+    for (const [ref, id] of Object.entries(created)) if (id === from) created[ref] = to;
+  };
   const resolve = (id: string): string => {
-    if (!id.startsWith('$')) return id;
+    if (!id.startsWith('$')) return renamed[id] ?? id;
     const real = created[id];
     if (!real) throw new EditError('invalid', `"${id}" is not added in this batch`);
     return real;
@@ -58,8 +73,14 @@ export function applyEdits(markdown: string, edits: Edit[]): { markdown: string;
 
   for (const edit of edits) {
     switch (edit.kind) {
-      case 'person':
-        editPerson(doc, resolve(edit.id), edit.set, edit.was);
+      case 'person': {
+        const id = resolve(edit.id);
+        const named = editPerson(doc, id, edit.set, edit.was);
+        if (named && named !== id) rename(id, named);
+        break;
+      }
+      case 'rename-id':
+        rename(resolve(edit.id), edit.to);
         break;
       case 'add-person':
         if (!edit.ref.startsWith('$')) throw new EditError('invalid', 'a new person needs a $reference');
@@ -87,7 +108,7 @@ export function applyEdits(markdown: string, edits: Edit[]): { markdown: string;
         throw new EditError('invalid', 'unknown edit');
     }
   }
-  return { markdown: doc.text(), created };
+  return { markdown: doc.text(), created, renamed };
 }
 
 // ---- the document -----------------------------------------------------------
@@ -263,7 +284,14 @@ export function personValue(person: Person, key: PersonField): string | undefine
   return person[key];
 }
 
-function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Changes<PersonField>): void {
+/**
+ * Changes a person's fields. Resolves to the id they should have now: a new
+ * one when the name changed and the old id was the one the app would have
+ * made from the old name — so a stand-in like "Eltern von Felix", once named
+ * Christian, is `christian` rather than `eltern` for good. Ids written by
+ * hand stay as they are.
+ */
+function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Changes<PersonField>): string | undefined {
   const person = doc.graph().people.get(id);
   if (!person) throw new EditError('conflict', `"${id}" is no longer in the file`);
   for (const [key, value] of Object.entries(was ?? {}) as Array<[PersonField, string | null]>) {
@@ -273,6 +301,12 @@ function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Chang
   }
   const changes = cleanChanges(set, PERSON_FIELDS);
   if (changes.some(([key, value]) => key === 'name' && value === null)) throw new EditError('invalid', 'a name is needed');
+  const name = changes.find(([key]) => key === 'name')?.[1];
+  const graph = doc.graph();
+  const others = { ...graph, people: new Map([...graph.people].filter(([other]) => other !== id)) };
+  // Someone only named in a relation so far had their id written there by hand.
+  const made = !person.stub && newId(person.name, others) === id;
+  const nextId = name && name !== person.name && made ? newId(name, others) : undefined;
 
   const lines = personLines(doc, id);
   if (lines.length === 0) {
@@ -280,7 +314,7 @@ function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Chang
     const values = Object.fromEntries(changes) as Changes<PersonField>;
     const mention = Math.max(...doc.graph().unions.filter((u) => [...u.partners, ...u.children].includes(id)).flatMap((u) => u.lines ?? []));
     insertPerson(doc, id, { name: person.name, ...values }, Number.isFinite(mention) ? mention : doc.end());
-    return;
+    return nextId;
   }
 
   // Later declarations win, so the change goes into the last; earlier ones lose the key.
@@ -308,6 +342,44 @@ function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Chang
   }
   for (const [line, changesOnLine] of edits) {
     if (changesOnLine.length > 0) doc.set(line.statement.index, rewrite(line.statement.raw, changesOnLine));
+  }
+  return nextId;
+}
+
+/**
+ * Gives `from` the id `to` everywhere the file names them: their own lines,
+ * every relation — partners, children, `adopted=` and `children=` lists —
+ * and the `me` line.
+ */
+function renameId(doc: Doc, from: string, to: string): void {
+  if (!doc.graph().people.has(from)) throw new EditError('conflict', `"${from}" is no longer in the file`);
+  if (from === to) return;
+  if (doc.graph().people.has(to)) throw new EditError('invalid', `"${to}" is taken`);
+  if (!/^[^\s"\\,=%+]+$/.test(to) || to.includes('->') || to.startsWith('$')) throw new EditError('invalid', `"${to}" cannot be an id`);
+
+  // A list of ids as written, `a,` or `a, b`: each name in it swapped on its own.
+  const swapList = (text: string) => text.replace(/[^,\s]+/g, (word) => (word === from ? to : word));
+  for (const statement of doc.statements()) {
+    const [first, second] = statement.tokens;
+    const changes: Array<{ start: number; end: number; text: string }> = [];
+    const swap = (token: Token, text: string) => {
+      if (text !== statement.raw.slice(token.start, token.end)) changes.push({ start: token.start, end: token.end, text });
+    };
+    if (first && !first.quoted && (first.value === 'person' || first.value === 'me') && second?.value === from) {
+      swap(second, to);
+    } else if (statement.tokens.some((t) => !t.quoted && (t.value === '+' || t.value === '->' || /^(children|adopted)=/.test(t.value)))) {
+      for (const token of statement.tokens) {
+        if (token.quoted) {
+          if (token.value === from) swap(token, to);
+          continue;
+        }
+        const raw = statement.raw.slice(token.start, token.end);
+        const equals = raw.indexOf('=');
+        if (equals === -1) swap(token, swapList(raw));
+        else if (/^(children|adopted)$/.test(raw.slice(0, equals))) swap(token, raw.slice(0, equals + 1) + swapList(raw.slice(equals + 1)));
+      }
+    }
+    if (changes.length > 0) doc.set(statement.index, rewrite(statement.raw, changes));
   }
 }
 

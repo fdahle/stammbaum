@@ -20,6 +20,8 @@ export interface Saved {
   source: FamilySource;
   /** The ids given to people added under a `$ref`. */
   created: Record<string, string>;
+  /** Old id → new id, for everyone whose id changed. */
+  renamed: Record<string, string>;
 }
 
 /** Someone else changed the same thing first; `source` is the family as it is now. */

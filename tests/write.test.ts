@@ -292,3 +292,31 @@ describe('one parent known, then both', () => {
     expect(applyEdits(both, [{ kind: 'add-child', parents: ['birgit'], child: 'felix' }]).markdown).toBe(both);
   });
 });
+
+describe('ids that follow the name', () => {
+  const file = '```family\nme eltern\nperson eltern "Eltern von Felix"\neltern -> felix, carolina\nperson oma "Gisela Bauer"\noma + eltern adopted=felix, carolina\nperson felix "Felix Dahle"\nperson carolina "Carolina Dahle"\n```\n';
+
+  it('renames an id everywhere the file names it', () => {
+    const { markdown, renamed } = applyEdits(file, [{ kind: 'rename-id', id: 'carolina', to: 'caro' }]);
+    expect(renamed).toEqual({ carolina: 'caro' });
+    expect(markdown).toBe(file.replace(/carolina/g, 'caro').replace('person caro "Caro Dahle"', 'person caro "Carolina Dahle"'));
+  });
+
+  it('gives a stand-in an id from its real name once it has one', () => {
+    const { markdown, renamed } = applyEdits(file, [{ kind: 'person', id: 'eltern', set: { name: 'Christian Dahle' } }]);
+    expect(renamed).toEqual({ eltern: 'christian' });
+    expect(markdown).not.toMatch(/\beltern\b/);
+    expect(markdown).toContain('me christian\nperson christian "Christian Dahle"\nchristian -> felix, carolina');
+    expect(markdown).toContain('oma + christian adopted=felix, carolina');
+  });
+
+  it('keeps an id written by hand, and one the new name would give anyway', () => {
+    expect(applyEdits(file, [{ kind: 'person', id: 'oma', set: { name: 'Gisela Vogt' } }]).renamed).toEqual({});
+    expect(applyEdits(file, [{ kind: 'person', id: 'felix', set: { name: 'Felix Müller' } }]).renamed).toEqual({});
+  });
+
+  it('refuses an id that is taken or could not be read back', () => {
+    expect(() => applyEdits(file, [{ kind: 'rename-id', id: 'felix', to: 'oma' }])).toThrow(EditError);
+    expect(() => applyEdits(file, [{ kind: 'rename-id', id: 'felix', to: 'a b' }])).toThrow(EditError);
+  });
+});
