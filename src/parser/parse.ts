@@ -30,9 +30,10 @@ export function parseFamily(markdown: string): FamilyGraph {
   };
   let me: { id: string; line: number; text: string } | undefined;
 
-  for (const { text, line } of dslLines(markdown)) {
-    const tokens = tokenize(text);
+  for (const { code, line } of statementLines(markdown)) {
+    const tokens = tokenize(code);
     if (tokens.length === 0) continue;
+    const text = code.trim();
     const warn = (message: string) => warnings.push({ line, message, text });
 
     if (!tokens[0]!.quoted && tokens[0]!.value === 'person') {
@@ -44,7 +45,7 @@ export function parseFamily(markdown: string): FamilyGraph {
           (t.value === '+' || t.value === '->' || t.value.startsWith('children=') || t.value.startsWith('adopted=')),
       )
     ) {
-      readRelation(tokens, unions, warn);
+      readRelation(tokens, line, unions, warn);
     } else if (!tokens[0]!.quoted && tokens[0]!.value === 'me') {
       if (tokens.length !== 2) warn('"me" needs exactly one person id');
       else me = { id: tokens[1]!.value, line, text };
@@ -105,32 +106,47 @@ function isOver(union: Union): boolean {
   return began && ended;
 }
 
-interface Token {
+export interface Token {
   value: string;
   quoted: boolean;
+  /** Where the token sits in the line, so the writer can change just it. */
+  start: number;
+  end: number;
 }
+
+/** A quoted section: `"…"`, where `\"` is a quote and `\\` a backslash. */
+const QUOTED = String.raw`"(?:[^"\\]|\\.)*"`;
 
 /**
  * Splits a statement into tokens. A token runs to the next space, except that
  * "quoted sections" may contain spaces — so `note="Wohnt in Lissabon."` stays
  * one token. `+` and `->` are always separate tokens.
  */
-function tokenize(text: string): Token[] {
+export function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
-  for (const [raw] of text.matchAll(/(?:"[^"]*"|[^\s"]+)+/g)) {
-    const fullyQuoted = /^"[^"]*"$/.test(raw);
-    if (fullyQuoted) {
-      tokens.push({ value: raw.slice(1, -1), quoted: true });
+  for (const match of text.matchAll(new RegExp(`(?:${QUOTED}|[^\\s"]+)+`, 'g'))) {
+    const raw = match[0];
+    const start = match.index;
+    const end = start + raw.length;
+    if (new RegExp(`^${QUOTED}$`).test(raw)) {
+      tokens.push({ value: unescape(raw.slice(1, -1)), quoted: true, start, end });
     } else if (raw.includes('"')) {
-      tokens.push({ value: raw.replace(/"/g, ''), quoted: false });
+      const value = raw.replace(new RegExp(QUOTED, 'g'), (quoted) => unescape(quoted.slice(1, -1)));
+      tokens.push({ value, quoted: false, start, end });
     } else {
       // `a+b` and `a->b` are legal without surrounding spaces.
+      let at = start;
       for (const piece of raw.split(/(->|\+)/g)) {
-        if (piece !== '') tokens.push({ value: piece, quoted: false });
+        if (piece !== '') tokens.push({ value: piece, quoted: false, start: at, end: at + piece.length });
+        at += piece.length;
       }
     }
   }
   return tokens;
+}
+
+function unescape(value: string): string {
+  return value.replace(/\\(.)/g, '$1');
 }
 
 const PERSON_KEYS = new Set([
@@ -182,7 +198,7 @@ function readPerson(tokens: Token[], line: number, people: Map<string, Person>, 
   }
 }
 
-function readRelation(tokens: Token[], unions: Unions, warn: (m: string) => void): void {
+function readRelation(tokens: Token[], line: number, unions: Unions, warn: (m: string) => void): void {
   const arrow = tokens.findIndex((t) => !t.quoted && t.value === '->');
   const left = arrow === -1 ? tokens : tokens.slice(0, arrow);
   let right = arrow === -1 ? [] : tokens.slice(arrow + 1);
@@ -214,6 +230,7 @@ function readRelation(tokens: Token[], unions: Unions, warn: (m: string) => void
 
   const pairs = attributes([...rest, ...after], warn);
   const union = unions.get(partners, pairs.some(([key]) => key === 'married' || key === 'together'));
+  union.lines = [...(union.lines ?? []), line];
 
   const children = right
     .map((t) => t.value)
@@ -250,31 +267,57 @@ function list(value: string): string[] {
 }
 
 function attributes(tokens: Token[], warn: (m: string) => void): Array<[string, string]> {
-  const pairs: Array<[string, string]> = [];
+  const { found, stray } = attributeSpans(tokens);
+  for (const token of stray) warn(`expected key=value, got "${token.value}"`);
+  return found.map(({ key, value }) => [key, value]);
+}
+
+/** One `key=value`, and the stretch of the line it takes up. */
+export interface Attribute {
+  key: string;
+  value: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * The key=value pairs among `tokens`, with where each sits. `stray` collects
+ * the tokens that are neither a pair nor the continuation of one.
+ */
+export function attributeSpans(tokens: Token[]): { found: Attribute[]; stray: Token[] } {
+  const found: Attribute[] = [];
+  const stray: Token[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]!;
     const eq = token.quoted ? -1 : token.value.indexOf('=');
     if (eq <= 0) {
       // `children=a, b` — a list continued after a space.
-      const previous = pairs[pairs.length - 1];
-      if (previous && previous[1].endsWith(',')) previous[1] += token.value;
-      else warn(`expected key=value, got "${token.value}"`);
+      const previous = found[found.length - 1];
+      if (previous && previous.value.endsWith(',')) {
+        previous.value += token.value;
+        previous.end = token.end;
+      } else stray.push(token);
       continue;
     }
-    const key = token.value.slice(0, eq);
-    let value = token.value.slice(eq + 1);
+    const attribute = { key: token.value.slice(0, eq), value: token.value.slice(eq + 1), start: token.start, end: token.end };
     // `note= "..."` — the quoted value landed in the next token.
-    if (value === '' && tokens[i + 1]?.quoted) {
-      value = tokens[i + 1]!.value;
+    const next = tokens[i + 1];
+    if (attribute.value === '' && next?.quoted) {
+      attribute.value = next.value;
+      attribute.end = next.end;
       i++;
     }
-    pairs.push([key, value]);
+    found.push(attribute);
   }
-  return pairs;
+  return { found, stray };
 }
 
-/** Yields the statement lines of every ```family block, with 1-based line numbers. */
-function* dslLines(markdown: string): Generator<{ text: string; line: number }> {
+/**
+ * The statement lines of every ```family block, with 1-based line numbers:
+ * `raw` as written, `code` the same with its comment cut off, so positions in
+ * one are positions in the other.
+ */
+export function* statementLines(markdown: string): Generator<{ line: number; raw: string; code: string }> {
   const lines = markdown.split(/\r?\n/);
   let inside = false;
   for (let i = 0; i < lines.length; i++) {
@@ -284,17 +327,18 @@ function* dslLines(markdown: string): Generator<{ text: string; line: number }> 
       inside = inside ? false : fence[1] === 'family';
       continue;
     }
-    if (!inside) continue;
-    const text = stripComment(raw).replace(/^\s*#.*$/, '').trim();
-    if (text !== '') yield { text, line: i + 1 };
+    if (!inside || /^\s*#/.test(raw)) continue;
+    const code = stripComment(raw);
+    if (code.trim() !== '') yield { line: i + 1, raw, code };
   }
 }
 
 /** Cuts a `%%` comment off a line — unless the `%%` is inside quotes, as in `note="100%%"`. */
-function stripComment(raw: string): string {
+export function stripComment(raw: string): string {
   let quoted = false;
   for (let i = 0; i < raw.length; i++) {
-    if (raw[i] === '"') quoted = !quoted;
+    if (quoted && raw[i] === '\\') i++;
+    else if (raw[i] === '"') quoted = !quoted;
     else if (!quoted && raw.startsWith('%%', i)) return raw.slice(0, i);
   }
   return raw;

@@ -27,6 +27,8 @@ export interface PersonContext {
   setViewer(id: string): void;
   /** Asks who is looking. */
   chooseViewer(): void;
+  /** Opens the editor for `person` — only there when whoever is looking may edit. */
+  edit?: ((person: Person) => void) | undefined;
 }
 
 /**
@@ -268,6 +270,8 @@ function actions(family: Family, person: Person, context: PersonContext): HTMLEl
   if (family.parents(person.id).length > 0) add('up', t().ancestors, `#/up/${id}`);
   if (family.children(person.id).length > 0) add('down', t().descendants, `#/down/${id}`);
   if (context.viewer !== person.id) add('me', t().thisIsMe, () => context.setViewer(person.id));
+  const { edit } = context;
+  if (edit) add('pencil', t().edit, () => edit(person));
   return row;
 }
 

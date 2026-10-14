@@ -1,6 +1,6 @@
 import type { Family } from '../family';
 import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from '../layout/layout';
-import { photoUrl } from '../data';
+import { familyStamp, photoUrl } from '../data';
 import { familyName, initials, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
 import { icon, weddingRings, RINGS } from '../ui/icons';
 import { isDeceased, unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
@@ -72,7 +72,7 @@ export class OverviewView {
   localize(): void {
     this.fab.title = t().fit;
     this.fab.setAttribute('aria-label', t().fit);
-    this.stamp.textContent = buildStamp(__BUILD_TIME__, __FAMILY_COMMIT__);
+    this.stamp.textContent = buildStamp(__BUILD_TIME__, familyStamp());
   }
 
   /** Rings whoever is looking at the tree. */

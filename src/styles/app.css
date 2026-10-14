@@ -1138,6 +1138,135 @@
     color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
   }
 
+  /* ---- editing ---------------------------------------------------------- */
+
+  .sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 90dvh;
+    padding: 16px;
+  }
+
+  .sheet-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+    margin: 0 -4px;
+    padding: 0 4px 4px;
+    overflow: auto;
+  }
+
+  /* Form rows set their own display, which would otherwise beat [hidden]. */
+  .sheet [hidden] {
+    display: none !important;
+  }
+
+  /* Below 16px a phone zooms the page in on every field it focuses. */
+  .sheet .input,
+  .sheet .select,
+  .sheet .textarea {
+    font-size: 1rem;
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .form-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: color-mix(in oklab, var(--color-base-content) 75%, transparent);
+  }
+
+  .form-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  /* What belongs to a box above it, such as the date and place of a death. */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-left: 12px;
+    border-left: 2px solid var(--color-base-300);
+  }
+
+  .form-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9375rem;
+    cursor: pointer;
+  }
+
+  .date-parts {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr 5.5rem;
+    gap: 6px;
+  }
+
+  .form-error {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: var(--radius-field);
+    background: color-mix(in oklab, var(--color-error) 12%, var(--color-base-100));
+    color: var(--color-error);
+    font-size: 0.875rem;
+  }
+
+  .sheet-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sheet-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-base-300);
+  }
+
+  .relative-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.9375rem;
+  }
+
+  .relative-add,
+  .relative-existing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sheet-text {
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+
+  /* A save on its way: the button cannot be pressed twice. */
+  .loading-wait {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
   /* ---- share as QR code ------------------------------------------------- */
 
   .share {

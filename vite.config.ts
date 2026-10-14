@@ -2,13 +2,14 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+import { familyApi } from './server/api';
 
-// The real family lives in data/, a private repository of its own that this
-// public one ignores. Without it — a fresh clone, CI — the app shows the
-// made-up sample family. FAMILY_DIR points anywhere else: `FAMILY_DIR=sample`.
+// The real family lives in data/, a folder this public repository ignores.
+// Without it — a fresh clone, CI — the app shows the made-up sample family.
+// FAMILY_DIR points anywhere else: `FAMILY_DIR=sample`.
 const root = fileURLToPath(new URL('.', import.meta.url));
 const familyDir = process.env.FAMILY_DIR
   ? path.resolve(process.env.FAMILY_DIR)
@@ -33,8 +34,24 @@ function familyCommit(dir: string): string {
   }
 }
 
-// `--mode single` produces one self-contained dist/index.html with every asset
-// (script, styles, photos) inlined, so it can be mailed around and opened offline.
+// `npm run dev` serves the same api/family and api/edits the production server
+// does, so the family can be edited locally too. The made-up sample ships with
+// this repository, so it stays read-only unless STAMMBAUM_EDIT=1 says otherwise.
+function familyApiPlugin(): Plugin {
+  const sample = path.join(root, 'sample');
+  const writable = process.env.STAMMBAUM_EDIT === '1' || path.resolve(familyDir) !== sample;
+  const api = familyApi({ dataDir: familyDir, user: () => 'local', editors: [], writable });
+  return {
+    name: 'stammbaum-family-api',
+    configureServer: (server) => void server.middlewares.use(api),
+    configurePreviewServer: (server) => void server.middlewares.use(api),
+  };
+}
+
+// The hosted app reads the family live from the server (`src/source/live.ts`)
+// and carries none of it in its files. `--mode single` produces one
+// self-contained dist/index.html with the family, script, styles and photos
+// inlined (`src/source/bundled.ts`), so it can be mailed around and opened offline.
 export default defineConfig(({ mode }) => ({
   base: './',
   // Printed under the tree, so a build that has gone stale is easy to spot.
@@ -43,7 +60,10 @@ export default defineConfig(({ mode }) => ({
     __FAMILY_COMMIT__: JSON.stringify(familyCommit(familyDir)),
   },
   resolve: {
-    alias: { '@family': familyDir },
+    alias: {
+      '@family': familyDir,
+      '@source': path.join(root, 'src/source', mode === 'single' ? 'bundled.ts' : 'live.ts'),
+    },
   },
   server: {
     // A FAMILY_DIR outside the project still has to be served in dev.
@@ -54,7 +74,7 @@ export default defineConfig(({ mode }) => ({
     assetsInlineLimit: mode === 'single' ? 100 * 1024 * 1024 : 4096,
     target: 'es2022',
   },
-  plugins: mode === 'single' ? [tailwindcss(), viteSingleFile()] : [tailwindcss()],
+  plugins: mode === 'single' ? [tailwindcss(), viteSingleFile()] : [tailwindcss(), familyApiPlugin()],
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],

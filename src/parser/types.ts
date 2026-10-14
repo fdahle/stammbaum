@@ -55,6 +55,8 @@ export interface Union {
   children: string[];
   /** The children who were adopted — every one of them is in `children` too. */
   adopted?: string[];
+  /** The family.md lines that make up this partnership, for the writer. */
+  lines?: number[];
 }
 
 /**

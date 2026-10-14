@@ -1,12 +1,16 @@
 import './styles/app.css';
 
+import { fetchChanges, loadSource, saveEdits } from '@source';
 import { upcoming } from './calendar';
-import { loadFamily, photoUrl } from './data';
+import { photoUrl, readFamily } from './data';
+import { openEditor, openNewPerson, type EditorContext } from './edit/editor';
 import { Family } from './family';
 import { LANGS, lang, setLang, t } from './i18n';
 import { relation } from './kinship';
 import { gaps } from './missing';
 import type { Person } from './parser/types';
+import type { Edit } from './parser/write';
+import { SaveConflict, type FamilySource } from './source/types';
 import { familyStats } from './stats';
 import { lifespan, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
@@ -34,7 +38,12 @@ const MODES = [
 
 type Mode = (typeof MODES)[number]['id'];
 
-const family = new Family(loadFamily());
+// The hosted app asks the server; the single file has the family built in.
+let source: FamilySource = await loadSource().catch((error: unknown) => {
+  must<HTMLElement>('#view').textContent = t().loadFailed;
+  throw error;
+});
+let family = new Family(readFamily(source));
 const appBar = must<HTMLElement>('.app-bar');
 const actions = must<HTMLElement>('.app-actions');
 const view = must<HTMLElement>('#view');
@@ -201,7 +210,7 @@ function parseRoute(hash: string): Route | undefined {
   return undefined;
 }
 
-const tree = new OverviewView(family, openFromTree);
+let tree = new OverviewView(family, openFromTree);
 /** Ancestor and descendant trees, built the first time they are asked for. */
 const subtrees = new Map<string, OverviewView>();
 /** The tree on screen, if a tree is on screen. */
@@ -239,7 +248,13 @@ function render(): void {
     case 'person': {
       const { person } = route;
       view.replaceChildren(
-        renderPerson(family, person, { viewer: viewer(), pickRelative, setViewer, chooseViewer: () => void chooseViewer() }),
+        renderPerson(family, person, {
+          viewer: viewer(),
+          pickRelative,
+          setViewer,
+          chooseViewer: () => void chooseViewer(),
+          edit: source.editable ? (someone) => openEditor(someone, editorContext()) : undefined,
+        }),
       );
       view.scrollTop = 0;
       document.title = `${person.name} — ${family.graph.title}`;
@@ -491,6 +506,11 @@ function renderMenu(): void {
   entry('cake', t().datesTitle, '#/dates');
   entry('chart', t().stats, '#/stats');
   entry('checklist', t().missing, '#/missing');
+  if (source.editable) {
+    entry('plus', t().addPerson, () =>
+      openNewPerson(editorContext(), (id) => (location.hash = `#/p/${encodeURIComponent(id)}`)),
+    );
+  }
   if (canShare()) entry('qr', t().share, () => openShare(location.href));
 
   const save = document.createElement('div');
@@ -568,14 +588,65 @@ function fileName(title: string): string {
 }
 
 /** A short message at the bottom of the screen that goes away on its own. */
-function toast(text: string): void {
+function toast(text: string, kind: 'error' | 'success' = 'error'): void {
   const element = document.createElement('div');
-  element.className = 'toast-note alert alert-error shadow-lg';
+  element.className = `toast-note alert alert-${kind} shadow-lg`;
   element.setAttribute('role', 'status');
   element.textContent = text;
   document.body.append(element);
-  setTimeout(() => element.remove(), 4000);
+  setTimeout(() => element.remove(), kind === 'error' ? 6000 : 2500);
 }
+
+// ---- editing ----------------------------------------------------------------
+
+function editorContext(): EditorContext {
+  return { family, save, caption };
+}
+
+/**
+ * Sends edits to the server and shows the family as it is afterwards. When
+ * someone else got there first, their version is shown instead and nothing of
+ * this edit is lost silently — it just has to be made again.
+ */
+async function save(edits: Edit[], message: string): Promise<Record<string, string> | undefined> {
+  try {
+    const saved = await saveEdits(edits, message);
+    useSource(saved.source);
+    toast(t().saved, 'success');
+    return saved.created;
+  } catch (error) {
+    if (error instanceof SaveConflict) {
+      // Any open form still holds the old values; it has to start again from the new ones.
+      for (const dialog of document.querySelectorAll('dialog[open]')) (dialog as HTMLDialogElement).close();
+      useSource(error.source);
+      toast(t().saveConflict);
+    } else {
+      console.error(error);
+      toast(t().saveError);
+    }
+    return undefined;
+  }
+}
+
+/** Puts a new version of the family on screen, wherever one was looking. */
+function useSource(next: FamilySource): void {
+  source = next;
+  family = new Family(readFamily(next));
+  title.textContent = family.graph.title;
+  tree = new OverviewView(family, openFromTree);
+  subtrees.clear();
+  refresh();
+}
+
+// Someone else may have saved while this tab was in the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  fetchChanges()
+    .then((next) => {
+      if (next && (next.version !== source.version || next.editable !== source.editable)) useSource(next);
+    })
+    .catch(() => undefined);
+});
 
 function group(label: string, ...content: HTMLElement[]): HTMLElement {
   const element = document.createElement('section');

@@ -1,30 +1,16 @@
-// `@family` is data/ when the private family is there, sample/ otherwise — see vite.config.ts.
-import familyMarkdown from '@family/family.md?raw';
 import { parseFamily } from './parser/parse';
 import type { FamilyGraph, Person } from './parser/types';
+import type { FamilySource } from './source/types';
 
-// Bundled at build time so the offline single-file build needs no network.
-// Phones name their pictures IMG_1234.JPG, so the upper-case spellings count too.
-const photos = import.meta.glob(
-  '@family/photos/*.{jpg,jpeg,png,webp,gif,avif,svg,JPG,JPEG,PNG,WEBP,GIF,AVIF,SVG}',
-  {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  },
-) as Record<string, string>;
+/** The pictures of the family on screen, by lower-case file name. */
+let photos = new Map<string, string>();
+let stamp: FamilySource['stamp'] = {};
 
-/** By lower-case file name: `photo=heinrich.jpg` finds Heinrich.JPG as well. */
-const byFileName = new Map(
-  Object.entries(photos).map(([path, url]) => [path.split('/').pop()!.toLowerCase(), url]),
-);
-
-function photoByName(name: string): string | undefined {
-  return byFileName.get(name.toLowerCase());
-}
-
-export function loadFamily(): FamilyGraph {
-  const graph = parseFamily(familyMarkdown);
+/** Reads the family out of `source`, which also decides where the pictures come from. */
+export function readFamily(source: FamilySource): FamilyGraph {
+  photos = source.photos;
+  stamp = source.stamp;
+  const graph = parseFamily(source.markdown);
   // A picture that is not there would otherwise just quietly be an initials bubble.
   for (const person of graph.people.values()) {
     for (const name of [person.photo, ...(person.photos ?? [])]) {
@@ -34,6 +20,16 @@ export function loadFamily(): FamilyGraph {
     }
   }
   return graph;
+}
+
+/** How current the family on screen is, for the line under the tree. */
+export function familyStamp(): FamilySource['stamp'] {
+  return stamp;
+}
+
+/** `photo=heinrich.jpg` finds Heinrich.JPG as well. */
+function photoByName(name: string): string | undefined {
+  return photos.get(name.toLowerCase());
 }
 
 export function photoUrl(person: Person): string | undefined {

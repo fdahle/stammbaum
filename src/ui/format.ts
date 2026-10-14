@@ -47,10 +47,13 @@ export function longDate(date: string | undefined): string {
   return t().longDate(d ? Number(d) : undefined, month, y!);
 }
 
-/** `Erstellt 11.09.2026, 14:05 · Daten 5dc071f` — when, and from what, this page was built. */
-export function buildStamp(builtAt: string, commit: string): string {
-  const when = new Date(builtAt).toLocaleString(t().locale, { dateStyle: 'medium', timeStyle: 'short' });
-  return t().built(when, commit);
+/**
+ * How current the family on screen is: `Stand 14.10.2026, 11:42` when it is
+ * read live, `Erstellt 11.09.2026, 14:05 · Daten 5dc071f` for a built copy.
+ */
+export function buildStamp(builtAt: string, stamp: { updated?: string; commit?: string }): string {
+  const format = (iso: string) => new Date(iso).toLocaleString(t().locale, { dateStyle: 'medium', timeStyle: 'short' });
+  return stamp.updated ? t().asOf(format(stamp.updated)) : t().built(format(builtAt), stamp.commit ?? '');
 }
 
 // ---- ages -----------------------------------------------------------------

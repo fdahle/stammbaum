@@ -66,45 +66,89 @@ opens on whoever is looking; an ancestor or descendant tree on its person.
 
 ```sh
 npm install
-npm run dev          # http://localhost:5173
-npm test             # parser, graph and layout tests
-npm run build        # dist/ — a normal static site
+npm run dev          # http://localhost:5173 — editing works here too
+npm test             # parser, writer, server, graph and layout tests
+npm run build        # dist/ and dist-server/ — the app and its small server
+npm start            # serves dist/ with the family from ./data (DATA_DIR=…)
 npm run build:single # dist/index.html — ONE self-contained file, works offline
 ```
 
-To host it, `docker compose up -d --build` runs `build:single` in a Node build
-stage and serves the resulting `index.html` from nginx on `127.0.0.1:8080`
-(`PORT=…` to change it); run it again after editing the family. A build from
-`data/` puts the whole family online, so keep that server private: the port is
-only reachable from the host itself, and a reverse proxy there adds the login —
+To host it, `docker compose up -d --build` builds the app and runs its server
+on `127.0.0.1:8080` (`PORT=…` to change it). The family is not part of the
+image: the container mounts `./data` and reads `family.md` and the photos from
+there live, so an edit — in the app or by hand — shows without a rebuild. That
+folder holds the whole family, so keep the server private: the port is only
+reachable from the host itself, and a reverse proxy there adds the login —
 [`deploy/`](deploy/) has an example for nginx with
-[Authelia](https://www.authelia.com) in front.
+[Authelia](https://www.authelia.com) in front, which also tells the server who
+is logged in.
+
+| Setting | |
+| --- | --- |
+| `FAMILY_DIR=./sample` | Mount another folder than `./data` |
+| `STAMMBAUM_EDITORS=jonas,oma` | Only these logins may edit; everyone else reads. Empty: everyone who can log in |
+| `STAMMBAUM_READONLY=1` | Nobody may edit |
+| `STAMMBAUM_UID`, `STAMMBAUM_GID` | Whose files the server writes (1000:1000) — make them yours, so `data/` stays yours to edit and back up |
+
+## Editing in the app
+
+Behind the login, every card has **Bearbeiten**: the person's details as a form
+— dates as day, month and year, where the year alone is enough — then their
+parents, partners and children, each with what can be done about them, and
+**+ Elternteil**, **+ Partner/in**, **+ Kind** to add someone new or someone
+already in the tree. The menu adds people connected to nobody yet. A
+partnership is edited from its row: married or together, since when, and
+whether and when it ended.
+
+Every change is written straight into `family.md`, and only where it belongs:
+one word in a person's line, one name added to a `->` list, a new `person` line
+next to the relatives it belongs with. Comments, prose, order and alignment
+stay as they were, so the file reads as if written by hand — and can still be
+edited by hand.
+
+Before each save the server puts the previous `family.md` into
+`data/history/`, named by the time, and adds a line to
+`data/history/changes.log` saying who changed what:
+
+```
+2026-10-14T11:40:31.535Z	jonas	Lea Bauer als Kind von Jonas & Sara eingetragen
+```
+
+To undo anything, copy an earlier file from `history/` back over `family.md`.
+Backing up `data/` backs up its history with it.
+
+When two relatives edit at once, both changes land as long as they are about
+different things. If both change the same field, the second one is told that
+someone was quicker, sees the new version and can make the change again —
+nothing is overwritten unseen. An app left open picks up other people's changes
+when it comes back to the foreground.
+
+`npm run dev` edits `data/` the same way, as the user `local`. The made-up
+sample ships with this repository, so it stays read-only there unless
+`STAMMBAUM_EDIT=1` says otherwise.
 
 ## Keeping the family private
 
 This repository is public, so it only carries the made-up Bauer family in
-`sample/`. Your own family goes into `data/` — ignored here, and a git
-repository of its own:
+`sample/`. Your own family goes into `data/` — a folder this repository
+ignores, and the only place the family lives:
 
 ```sh
 mkdir -p data/photos && cp sample/family.md data/
-cd data && git init && git add . && git commit -m "Our family"
-# optional, a private remote:
-git remote add origin git@github.com:<you>/<family>.git && git push -u origin main
 ```
 
-`npm run dev` and both builds use `data/` whenever `data/family.md` exists and
-fall back to `sample/` otherwise. `FAMILY_DIR=<folder>` points them anywhere
-else — `FAMILY_DIR=sample npm run dev` shows the sample even with your family in
-place. The tests always run against the sample.
+`npm run dev` and the single-file build use `data/` whenever `data/family.md`
+exists and fall back to `sample/` otherwise. `FAMILY_DIR=<folder>` points them
+anywhere else — `FAMILY_DIR=sample npm run dev` shows the sample even with your
+family in place. The tests always run against the sample.
 
-A build made from `data/` contains every name and photo: mail the file around,
-but never publish `dist/`.
-
-`build:single` inlines the script, the styles and every photo as `data:` URIs.
-The result is a single HTML file you can mail to relatives or open from a USB
-stick with no server and no network — which is usually what a family gathering
-in a house with bad reception actually needs.
+The hosted app's files carry no family at all; it arrives from the server once
+someone has logged in. The single file is different: `build:single` inlines the
+family, the script, the styles and every photo as `data:` URIs into one HTML
+file you can mail to relatives or open from a USB stick with no server and no
+network — which is usually what a family gathering in a house with bad
+reception actually needs. It is a read-only snapshot of the day it was built:
+mail it around, but never publish it.
 
 ## Writing the family file
 
@@ -174,7 +218,8 @@ Notes:
   lasted: *seit 2001 · 25 J.*
 - `birthplace`, `deathplace`, `job` and `lives` are free text and shown as
   written: `* 2. April 1931 in Lindau`, *Wohnt in Lissabon*. Quote anything
-  with spaces: `deathplace="Bad Wörishofen"`.
+  with spaces: `deathplace="Bad Wörishofen"`. Inside quotes, `\"` is a quote
+  and `\\` a backslash: `note="Sagte immer \"Moin\""`.
 - `adopted=<child>, …` lists children of a partnership who were adopted. They
   count as children everywhere — no `->` needed — and their card says so. A
   child may also appear in two partnerships, birth parents and adoptive ones.
@@ -268,8 +313,10 @@ second palette existing anywhere.
 Vite + TypeScript with Tailwind CSS 4 and daisyUI 5 for the styling and the
 theme system; no UI framework and no runtime JavaScript dependencies. Tailwind
 and daisyUI are build-time only, so the offline file still fetches nothing —
-about 99 kB of JavaScript and 97 kB of CSS, both tree-shaken to what the app
-actually uses. Icons are inline SVG, so there is no icon font either.
+about 111 kB of JavaScript and 126 kB of CSS, both tree-shaken to what the app
+actually uses. Icons are inline SVG, so there is no icon font either. The
+server is about 40 kB of Node with nothing but its standard library, and shares
+the parser and the writer with the app.
 
 The overview is one SVG with a transform for pan and zoom, driven by Pointer
 Events so mouse, trackpad, pen and touch all take the same code path. The person
@@ -280,10 +327,13 @@ component classes, because utility strings inside generated SVG would be
 unreadable.
 
 ```
-data/                   your family — ignored here, a private repo of its own
+data/                   your family and its history/ — ignored here
 sample/family.md        the made-up sample family, and the format in prose
 sample/photos/          its placeholder portraits
-src/parser/             markdown → { people, unions, warnings }
+src/parser/             markdown → { people, unions, warnings }, and back: write.ts
+src/source/             where the family comes from: the server, or built in
+src/edit/               the editor: forms, and what they turn into
+server/                 the app's server: api/family, api/edits, photos/, history
 src/family.ts           derived lookups: parents, broods, search, subtrees, paths
 src/calendar.ts         upcoming birthdays and anniversaries
 src/stats.ts            the family in numbers
@@ -293,6 +343,7 @@ src/i18n.ts             the app's own words, German and English
 src/layout/layout.ts    generations, tidy horizontal placement, refinement sweep
 src/ui/icons.ts         inline stroked SVG icons
 src/ui/picker.ts        the searchable "who?" sheet
+src/ui/sheet.ts         every other sheet
 src/ui/lightbox.ts      photos full screen, with pinch zoom
 src/ui/qr.ts            a QR code encoder of its own
 src/ui/share.ts         the "share this page" QR sheet
@@ -303,7 +354,7 @@ src/views/dates.ts      the birthdays and anniversaries coming up
 src/views/stats.ts      the numbers as tiles
 src/views/missing.ts    the checklist for whoever keeps the file
 src/styles/app.css      Tailwind + daisyUI setup and every component rule
-tests/                  parser, family, kinship, age, calendar, stats, gaps, QR and layout tests (vitest)
+tests/                  parser, writer, server, family, kinship, age, calendar, stats, gaps, QR and layout (vitest)
 ```
 
 The layout is a two-stage tidy tree: a recursive walk places each couple above

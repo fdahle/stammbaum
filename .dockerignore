@@ -1,5 +1,7 @@
 node_modules
 dist
-# Only this repository's history; data/.git stays in, for the family commit.
+dist-server
+# The family is mounted at run time, never copied into the image.
+data
 .git
 **/.DS_Store
