@@ -13,11 +13,28 @@ enhancement. Three screens, one markdown file:
 - **Verwandtschaft** — how any two people are related (`#/r/<a>/<b>`): the word
   for it in both directions, and the chain of parents, children and partners
   between them, which the tree can then highlight (`#/path/<a>/<b>`).
+- **Geburtstage & Jahrestage** — the birthdays and anniversaries of the next
+  30 days (`#/dates`), to check before walking in.
+- **Familie in Zahlen** — how many, how many generations, the oldest and the
+  youngest, the longest marriage, the most common surname (`#/stats`).
+- **Was fehlt noch?** — a checklist for whoever keeps the file (`#/missing`):
+  the file's warnings, and everyone without a date of birth, a `sex=`, a photo,
+  or a link to the rest of the family, each with the line to edit. Something
+  to ask about at the next gathering.
+
+On the hosted version, the menu shows the page on screen as a **QR code**: the
+person you are talking to scans it and has the same relationship, tree or
+person on their own phone. The encoder is part of the app — no library, no
+network — and the single file mailed around leaves the entry out, since a
+`file://` address leads nowhere on another phone.
 
 Everyone is captioned with what they are to whoever is looking — *Tante*,
 *Cousine 2. Grades* — and search finds people by name, place, job, year of
-birth or by that relation ("tante", "cousin"). The app speaks German and
-English; the menu switches between them.
+birth or by that relation ("tante", "cousin"); "mueller" and "strasse" find
+*Müller* and *Straße*. The app speaks German and English; the menu switches
+between them. The menu also saves the tree on screen as a PNG or SVG, with the
+family's name on top and always in light colours — for a poster, or to send
+around.
 
 The family lives in `data/family.md`, written in a mermaid-flavoured DSL, so the
 tree is edited like text and reviewed like code. That folder is private and
@@ -42,7 +59,8 @@ app uses.
 | Arrow keys, `+` / `-`, Enter | The same, from the keyboard |
 
 The tree is clamped so it can never be flung off screen, and the button in the
-bottom corner zooms out to the whole family.
+bottom corner zooms out to the whole family. A tree too wide for the screen
+opens on whoever is looking; an ancestor or descendant tree on its person.
 
 ## Running it
 
@@ -115,7 +133,7 @@ nina + david together=2012 separated=2018
 | `<a> + <b> key=value …` | A partnership. |
 | `<a> + <b> -> <child>, <child>` | Children of that partnership. |
 | `<a> -> <child>` | Children whose second parent is unknown. |
-| `me <id>` | Whose point of view relations are named from, by default. |
+| `me <id>` | Optional: whose point of view relations are named from until someone says who they are. |
 | `%% …` | Comment. |
 
 **Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`,
@@ -133,7 +151,8 @@ Notes:
 - Use `together` for a couple who are not married.
 - A date you do not know or do not care to publish can be written as `?` or
   `true` — `a + b together=?`, `a + b divorced=true`. The partnership is drawn
-  as that kind of partnership, just without a year next to it.
+  as that kind of partnership, just without a year next to it. The same goes
+  for people: `died=?` marks someone as dead without a date (*1931 – †*).
 - Dates are free text, but `1956`, `1956-04` and `1956-04-02` are formatted
   nicely (`* 2. April 1956`); anything else is printed as written.
 - Ids are the deep-link handles — `#/p/klaus` opens Klaus directly — so keep
@@ -144,9 +163,11 @@ Notes:
   is looking — see [Who is looking](#who-is-looking): *Tante*, *Cousine 2.
   Grades*, *Schwager*, *Mann der Cousine*, or in English *Aunt*, *Second
   cousin*, *Cousin's husband*. `sex=m` or `sex=f` (`w` works too) picks the
-  gendered word; without it the caption names both (*Onkel/Tante*). People who
-  are neither blood relatives nor one partnership away from one get no caption
-  — the relationship screen still shows how they are connected.
+  gendered word; without it the caption names both (*Onkel/Tante*).
+  Step-siblings (*Stiefbruder*) and the *Schwippschwager* — a partner's
+  sibling's partner, or a sibling's partner's sibling — have their words too.
+  Anyone further out gets no caption — the relationship screen still shows how
+  they are connected.
 - With a full `born` date the card shows the age — *37 Jahre*, or *wurde 80
   Jahre alt* with a `died` date too — and a note on the birthday itself. With
   only a year it says *etwa*. A lasting partnership says how long it has
@@ -157,17 +178,25 @@ Notes:
 - `adopted=<child>, …` lists children of a partnership who were adopted. They
   count as children everywhere — no `->` needed — and their card says so. A
   child may also appear in two partnerships, birth parents and adoptive ones.
+  A single adoptive parent works the same way: `petra adopted=marie`.
   Attributes may come before or after the `->` children.
 - Statements about one partnership may be split across lines and written in
-  either partner order; they merge.
-- Photos are file names inside the `photos/` folder next to `family.md`. Anyone
+  either partner order; they merge. The exception is a couple who divorced and
+  then married each other again: a new `married=` (or `together=`) after the
+  end starts a second partnership, as with any remarriage.
+- Photos are file names inside the `photos/` folder next to `family.md`, in any
+  case (`IMG_1234.JPG` is found as `img_1234.jpg`). Anyone
   without a photo gets an initials bubble in a colour derived from their id.
   `photos=a.jpg, b.jpg` adds more pictures; the card shows them as a gallery,
-  and tapping the portrait opens them full screen.
+  and tapping the portrait opens them full screen, where a pinch, a double tap
+  or the mouse wheel zooms in.
 - `login` is the person's user name at the login in front of the app — see
   [Who is looking](#who-is-looking).
 - Undeclared ids still render, and the app shows a dismissible list of hints
-  about the file — a half-finished tree never breaks the page.
+  about the file — a half-finished tree never breaks the page. The hints also
+  catch what parses but cannot be true: a person declared twice, a missing
+  photo, a child born before its parent, a death before the birth, someone who
+  ends up their own ancestor.
 
 ## Who is looking
 
@@ -182,7 +211,17 @@ this order:
    [`deploy/nginx-stammbaum.conf`](deploy/nginx-stammbaum.conf).
 3. The file's `me` line.
 
-"Niemand davon" in the picker turns the captions off on that phone.
+With neither of the first two, the first visit asks **Wer bist du?** rather
+than quietly captioning everything for the file's `me` — which matters for the
+single file mailed around, where everyone would otherwise read the author's
+captions as their own. Closing the question keeps the `me` line, and every
+person card says whose view its captions are written from (*aus Sicht von
+Jonas*), with a tap to change it. "Niemand davon" in the picker turns the
+captions off on that phone.
+
+So `me` is a default, not the shape of the file: the file itself describes the
+family from nobody's point of view, and works just as well without a `me`
+line.
 
 ## Language
 
@@ -229,7 +268,7 @@ second palette existing anywhere.
 Vite + TypeScript with Tailwind CSS 4 and daisyUI 5 for the styling and the
 theme system; no UI framework and no runtime JavaScript dependencies. Tailwind
 and daisyUI are build-time only, so the offline file still fetches nothing —
-about 67 kB of JavaScript and 88 kB of CSS, both tree-shaken to what the app
+about 99 kB of JavaScript and 97 kB of CSS, both tree-shaken to what the app
 actually uses. Icons are inline SVG, so there is no icon font either.
 
 The overview is one SVG with a transform for pan and zoom, driven by Pointer
@@ -246,17 +285,25 @@ sample/family.md        the made-up sample family, and the format in prose
 sample/photos/          its placeholder portraits
 src/parser/             markdown → { people, unions, warnings }
 src/family.ts           derived lookups: parents, broods, search, subtrees, paths
+src/calendar.ts         upcoming birthdays and anniversaries
+src/stats.ts            the family in numbers
+src/missing.ts          what the file does not know yet
 src/kinship.ts          what one person is to another, in German and English
 src/i18n.ts             the app's own words, German and English
 src/layout/layout.ts    generations, tidy horizontal placement, refinement sweep
 src/ui/icons.ts         inline stroked SVG icons
 src/ui/picker.ts        the searchable "who?" sheet
-src/ui/lightbox.ts      photos full screen
+src/ui/lightbox.ts      photos full screen, with pinch zoom
+src/ui/qr.ts            a QR code encoder of its own
+src/ui/share.ts         the "share this page" QR sheet
 src/views/overview.ts   the gesture-driven SVG tree
 src/views/person.ts     one person and their first-degree relatives
 src/views/relation.ts   how two people are related, and the path between them
+src/views/dates.ts      the birthdays and anniversaries coming up
+src/views/stats.ts      the numbers as tiles
+src/views/missing.ts    the checklist for whoever keeps the file
 src/styles/app.css      Tailwind + daisyUI setup and every component rule
-tests/                  parser, family, kinship, age and layout tests (vitest)
+tests/                  parser, family, kinship, age, calendar, stats, gaps, QR and layout tests (vitest)
 ```
 
 The layout is a two-stage tidy tree: a recursive walk places each couple above

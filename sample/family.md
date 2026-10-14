@@ -17,7 +17,7 @@ the app picks up instead whenever it exists — see the README.
 | `<a> + <b> -> <child>, <child>` | children of that partnership |
 | `<a> + <b> adopted=<child>, <child>` | children of that partnership who were adopted — no `->` needed for them |
 | `<a> -> <child>` | children whose second parent is unknown |
-| `me <id>` | whose point of view the detail view takes: everyone is captioned with what they are to that person — Tante, Cousine, Schwager |
+| `me <id>` | whose point of view the captions take until someone says who they are — Tante, Cousine, Schwager. Optional: the rest of the file is written from nobody's point of view |
 | `%% ...` | comment |
 
 Ids are the deep-link handles (`#/p/klaus`), so keep them short and lowercase.
