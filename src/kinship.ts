@@ -7,7 +7,8 @@ import { shortName } from './ui/format';
  * What `to` is to `from`: "Tante", "Cousine 2. Grades", "Mann der Cousine" —
  * or "Aunt", "Second cousin", "Cousin's husband". Blood relations are named
  * from the nearest common ancestor; in-laws are one partnership away from a
- * blood relative. Anyone further out is `undefined`.
+ * blood relative. Step-siblings and the Schwippschwager have words of their
+ * own too. Anyone further out is `undefined`.
  */
 export function relation(family: Family, from: string, to: string, lang: Lang = 'de'): string | undefined {
   const target = family.person(to);
@@ -15,7 +16,12 @@ export function relation(family: Family, from: string, to: string, lang: Lang = 
   const words = LEXICONS[lang];
   const kin = blood(family, from, to);
   if (kin) return say(words.blood(kin), target);
-  return partnerOfRelative(family, from, target, words) ?? relativeOfPartner(family, from, target, words);
+  return (
+    partnerOfRelative(family, from, target, words) ??
+    relativeOfPartner(family, from, target, words) ??
+    stepSibling(family, from, target, words) ??
+    coSiblingInLaw(family, from, target, words)
+  );
 }
 
 // ---- blood ----------------------------------------------------------------
@@ -102,6 +108,45 @@ function ended(status: UnionStatus): boolean {
   return status === 'divorced' || status === 'separated';
 }
 
+/** The people `id` is with now — partnerships that ended do not count. */
+function currentPartners(family: Family, id: string): Person[] {
+  return family
+    .partnerships(id)
+    .flatMap(({ union, partner }) => (partner && !ended(unionStatus(union)) ? [partner] : []));
+}
+
+/** Brothers and sisters, half ones included. */
+function siblings(family: Family, id: string): Person[] {
+  const all = family.parents(id).flatMap((parent) => family.children(parent.id));
+  return [...new Set(all)].filter((sibling) => sibling.id !== id);
+}
+
+// ---- step and Schwipp -------------------------------------------------------
+
+/** `to` is the child of a parent's partner, with no parent in common: Stiefbruder. */
+function stepSibling(family: Family, from: string, to: Person, words: Lexicon): string | undefined {
+  const step = family
+    .parents(from)
+    .flatMap((parent) => currentPartners(family, parent.id))
+    .some((partner) => family.children(partner.id).some((child) => child.id === to.id));
+  return step ? say(words.stepSibling, to) : undefined;
+}
+
+/**
+ * The partner of a partner's sibling, or the sibling of a sibling's partner:
+ * the Schwippschwager, one step past the Schwager in either direction.
+ */
+function coSiblingInLaw(family: Family, from: string, to: Person, words: Lexicon): string | undefined {
+  if (from === to.id) return undefined;
+  const viaPartner = currentPartners(family, from)
+    .flatMap((partner) => siblings(family, partner.id))
+    .some((sibling) => currentPartners(family, sibling.id).some((p) => p.id === to.id));
+  const viaSibling = siblings(family, from)
+    .flatMap((sibling) => currentPartners(family, sibling.id))
+    .some((partner) => siblings(family, partner.id).some((s) => s.id === to.id));
+  return viaPartner || viaSibling ? say(words.coSiblingInLaw, to) : undefined;
+}
+
 // ---- words ----------------------------------------------------------------
 
 /** One word for a man and for a woman, plus a neutral one where the language has it. */
@@ -121,6 +166,9 @@ interface Lexicon {
   parentInLaw: Term;
   childInLaw: Term;
   siblingInLaw: Term;
+  stepSibling: Term;
+  /** Schwippschwager: a partner's sibling's partner, a sibling's partner's sibling. */
+  coSiblingInLaw: Term;
   ex(term: Term): Term;
   /** `term` (what `person` is) of `relative`, who is `relativeTerm`: "Mann der Cousine", "Cousin's husband". */
   of(term: Term, person: Person, relativeTerm: Term, relative: Person): string;
@@ -212,6 +260,8 @@ const GERMAN: Lexicon = {
   parentInLaw: { m: 'Schwiegervater', f: 'Schwiegermutter', x: 'Schwiegerelternteil' },
   childInLaw: { m: 'Schwiegersohn', f: 'Schwiegertochter', x: 'Schwiegerkind' },
   siblingInLaw: { m: 'Schwager', f: 'Schwägerin' },
+  stepSibling: { m: 'Stiefbruder', f: 'Stiefschwester', x: 'Stiefgeschwister' },
+  coSiblingInLaw: { m: 'Schwippschwager', f: 'Schwippschwägerin' },
   ex: (term) => prefixed(term, 'Ex-'),
   of: (term, person, relativeTerm, relative) => `${say(term, person)} ${genitivePhrase(relativeTerm, relative)}`,
 };
@@ -277,6 +327,9 @@ const ENGLISH: Lexicon = {
   parentInLaw: { m: 'Father-in-law', f: 'Mother-in-law', x: 'Parent-in-law' },
   childInLaw: { m: 'Son-in-law', f: 'Daughter-in-law', x: 'Child-in-law' },
   siblingInLaw: { m: 'Brother-in-law', f: 'Sister-in-law', x: 'Sibling-in-law' },
+  stepSibling: { m: 'Stepbrother', f: 'Stepsister', x: 'Step-sibling' },
+  // English has no word of its own and stretches "in-law" this far too.
+  coSiblingInLaw: { m: 'Brother-in-law', f: 'Sister-in-law', x: 'Sibling-in-law' },
   ex: (term) => map(term, (word) => `Ex-${word.toLowerCase()}`),
   of: (term, person, relativeTerm, relative) =>
     `${possessive(relativeTerm, relative)} ${say(term, person).toLowerCase()}`,

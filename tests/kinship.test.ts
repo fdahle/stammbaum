@@ -157,3 +157,51 @@ describe('relation in English', () => {
     expect(en('max', 'fremd')).toBeUndefined();
   });
 });
+
+describe('patchwork families', () => {
+  const patchwork = new Family(
+    parseFamily(`
+\`\`\`family
+person mama "Mama" sex=f
+person papa "Papa" sex=m
+person neu "Neu" sex=m
+person exfrau "Exfrau" sex=f
+person ich "Ich" sex=f
+person bruder "Bruder" sex=m
+person stief "Stief" sex=m
+mama + papa married=1985 divorced=2000 -> ich, bruder
+mama + neu married=2005
+neu + exfrau married=1990 divorced=2001 -> stief
+
+person ehemann "Ehemann" sex=m
+person schwager "Schwager" sex=m
+person schwipp "Schwipp" sex=f
+person schwiema "Schwiegermutter" sex=f
+ich + ehemann married=2015
+schwiema -> ehemann, schwager
+schwager + schwipp married=2018
+
+person bfrau "Bfrau" sex=f
+person bfs "Bfs" sex=f
+person bfmama "Bfmama" sex=f
+bruder + bfrau married=2019
+bfmama -> bfrau, bfs
+\`\`\`
+`),
+  );
+
+  it("names the children of a parent's partner step-siblings", () => {
+    expect(relation(patchwork, 'ich', 'stief')).toBe('Stiefbruder');
+    expect(relation(patchwork, 'stief', 'ich')).toBe('Stiefschwester');
+    expect(relation(patchwork, 'ich', 'stief', 'en')).toBe('Stepbrother');
+  });
+
+  it("names a partner's sibling's partner, and a sibling's partner's sibling, Schwippschwager", () => {
+    expect(relation(patchwork, 'ich', 'schwipp')).toBe('Schwippschwägerin');
+    expect(relation(patchwork, 'schwipp', 'ich')).toBe('Schwippschwägerin');
+    expect(relation(patchwork, 'ich', 'bfs')).toBe('Schwippschwägerin');
+    expect(relation(patchwork, 'ich', 'schwipp', 'en')).toBe('Sister-in-law');
+  });
+
+});
+
