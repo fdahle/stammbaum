@@ -68,6 +68,11 @@ const de = {
   inDays: (days: number) => (days === 0 ? 'heute' : days === 1 ? 'morgen' : `in ${days} Tagen`),
 
   more: 'Mehr',
+  share: 'QR-Code dieser Seite',
+  shareTitle: 'Diese Seite teilen',
+  shareHint: 'Mit der Handykamera scannen — dort öffnet sich genau diese Seite.',
+  copyLink: 'Link kopieren',
+  copied: 'Kopiert',
 
   missing: 'Was fehlt noch?',
   missingIntro: 'Was family.md noch nicht weiß — zum Nachfragen beim nächsten Treffen.',
@@ -203,6 +208,11 @@ const en: Dict = {
   inDays: (days) => (days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`),
 
   more: 'More',
+  share: 'QR code for this page',
+  shareTitle: 'Share this page',
+  shareHint: 'Scan it with a phone camera to open this very page there.',
+  copyLink: 'Copy link',
+  copied: 'Copied',
 
   missing: 'What is missing?',
   missingIntro: 'What family.md does not know yet — something to ask about at the next gathering.',

@@ -11,6 +11,7 @@ import { familyStats } from './stats';
 import { lifespan, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
 import { pickPerson } from './ui/picker';
+import { canShare, openShare } from './ui/share';
 import { readStored, writeStored } from './ui/storage';
 import { bubble } from './ui/tile';
 import { renderDates } from './views/dates';
@@ -490,6 +491,7 @@ function renderMenu(): void {
   entry('cake', t().datesTitle, '#/dates');
   entry('chart', t().stats, '#/stats');
   entry('checklist', t().missing, '#/missing');
+  if (canShare()) entry('qr', t().share, () => openShare(location.href));
 
   const save = document.createElement('div');
   save.className = 'join w-full';

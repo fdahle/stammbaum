@@ -1138,6 +1138,40 @@
     color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
   }
 
+  /* ---- share as QR code ------------------------------------------------- */
+
+  .share {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .share .picker-header {
+    align-self: stretch;
+  }
+
+  /* White in both themes: scanners want dark modules on a light ground. */
+  .share-code {
+    width: min(72vw, 280px);
+    height: auto;
+    border-radius: var(--radius-field);
+  }
+
+  .share .picker-hint {
+    margin: 0;
+    text-align: center;
+  }
+
+  .share-url {
+    margin: 0;
+    max-width: 100%;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+  }
+
   /* ---- lightbox --------------------------------------------------------- */
 
   /* As large as the screen allows, small source pictures included. */

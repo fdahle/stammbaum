@@ -27,6 +27,7 @@ const PATHS = {
   download: ['M12 4v11', 'M7 10l5 5 5-5', 'M5 20h14'],
   chart: ['M3 20h18', 'M6 20v-8', 'M11 20V5', 'M16 20v-5', 'M21 20V9'],
   checklist: ['M10 6h10', 'M10 12h10', 'M10 18h10', 'M4 6l1.5 1.5L8 5', 'M4 12l1.5 1.5L8 11', 'M4.5 18h2'],
+  qr: ['M4 4h6v6H4z', 'M14 4h6v6h-6z', 'M4 14h6v6H4z', 'M14 14h2.5v2.5H14z', 'M17.5 17.5H20V20h-2.5z', 'M14 20h1', 'M20 14v1'],
 } as const;
 
 export type IconName = keyof typeof PATHS;
