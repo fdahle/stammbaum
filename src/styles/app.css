@@ -210,6 +210,11 @@
     fill: var(--color-primary);
   }
 
+  /* Saving a picture reads the colours straight away; nothing may be mid-fade. */
+  .tree.is-exporting * {
+    transition: none !important;
+  }
+
   .tree-chip {
     position: absolute;
     top: 12px;
@@ -1075,6 +1080,16 @@
 
   .hint.is-leaving {
     opacity: 0;
+  }
+
+  .toast-note {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 60;
+    max-width: 420px;
+    margin-inline: auto;
   }
 
   .warnings {

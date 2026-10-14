@@ -428,6 +428,102 @@ export class OverviewView {
     this.momentum = requestAnimationFrame(step);
   }
 
+  // ---- export -------------------------------------------------------------
+
+  /**
+   * The whole tree as a picture of its own, `title` on top — for a poster, or
+   * to send around. The stylesheet does not travel with the file, so every
+   * element takes its computed look along inline, colours resolved to plain
+   * sRGB and photos embedded.
+   */
+  async exportImage(format: 'svg' | 'png', title: string): Promise<Blob> {
+    // Computed styles need the tree in the document, if only off screen.
+    const detached = !this.element.isConnected;
+    if (detached) {
+      this.element.style.cssText = 'position: fixed; left: -10000px; top: 0; width: 800px; height: 600px';
+      document.body.append(this.element);
+    }
+    try {
+      const svg = await this.standaloneSvg(title);
+      const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' });
+      return format === 'svg' ? blob : await rasterize(blob, this.layout.width, this.height + TITLE_SPACE);
+    } finally {
+      if (detached) {
+        this.element.remove();
+        this.element.style.cssText = '';
+      }
+    }
+  }
+
+  private async standaloneSvg(title: string): Promise<SVGSVGElement> {
+    // Always light: a dark poster prints badly. The styles are read in one
+    // synchronous go, so the page never paints in the borrowed theme.
+    const root = document.documentElement;
+    const theme = root.dataset.theme;
+    // Without transitions, so the computed colours are the final ones at once.
+    this.svg.classList.add('is-exporting');
+    root.dataset.theme = 'light';
+    // A picture for the whole family: no ring for whoever happens to be looking.
+    const personal = [...this.svg.querySelectorAll('.is-me, .is-focused')];
+    const marks = personal.map((element) => [...element.classList].filter((c) => c === 'is-me' || c === 'is-focused'));
+    personal.forEach((element, i) => element.classList.remove(...marks[i]!));
+
+    const clone = this.svg.cloneNode(true) as SVGSVGElement;
+    const originals = [this.svg, ...this.svg.querySelectorAll('*')];
+    const copies = [clone, ...clone.querySelectorAll('*')];
+    originals.forEach((original, i) => {
+      const copy = copies[i]!;
+      const style = getComputedStyle(original);
+      const inline = EXPORTED_STYLES.map((property) => {
+        const value = style.getPropertyValue(property);
+        return value ? `${property}: ${property === 'fill' || property === 'stroke' ? solidColor(value) : value}` : '';
+      });
+      copy.setAttribute('style', inline.filter(Boolean).join('; '));
+      for (const attribute of ['class', 'tabindex', 'role']) copy.removeAttribute(attribute);
+    });
+    // The title gets a band of its own above the tree.
+    const width = this.layout.width;
+    const height = this.height + TITLE_SPACE;
+    clone.setAttribute('xmlns', SVG_NS);
+    clone.setAttribute('width', String(width));
+    clone.setAttribute('height', String(height));
+    clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    clone.querySelector(':scope > g')?.setAttribute('transform', `translate(0 ${TITLE_SPACE})`);
+
+    const shell = getComputedStyle(document.querySelector('.app-shell') ?? document.body);
+    const background = svgEl('rect', { width, height, fill: solidColor(shell.backgroundColor) });
+    const heading = svgEl('text', {
+      x: width / 2,
+      y: 64,
+      'text-anchor': 'middle',
+      'font-size': 28,
+      'font-weight': 600,
+      'font-family': shell.fontFamily,
+      fill: solidColor(shell.color),
+    });
+    heading.textContent = title;
+    clone.prepend(background, heading);
+
+    personal.forEach((element, i) => element.classList.add(...marks[i]!));
+    if (theme === undefined) delete root.dataset.theme;
+    else root.dataset.theme = theme;
+    this.svg.classList.remove('is-exporting');
+
+    // A file opened on its own cannot reach the app's photo URLs.
+    await Promise.all(
+      [...clone.querySelectorAll('image')].map(async (image) => {
+        const href = image.getAttribute('href');
+        if (!href || href.startsWith('data:')) return;
+        try {
+          image.setAttribute('href', await dataUrl(await (await fetch(href)).blob()));
+        } catch {
+          image.remove();
+        }
+      }),
+    );
+    return clone;
+  }
+
   // ---- drawing ------------------------------------------------------------
 
   private buildFab(): HTMLButtonElement {
@@ -630,6 +726,82 @@ function assignLanes(layout: Layout): Map<string, number> {
     lanes.set(span.union.id, lane);
   }
   return lanes;
+}
+
+/** Everything the tree's stylesheet decides that an exported picture needs to keep. */
+const EXPORTED_STYLES = [
+  'fill',
+  'fill-opacity',
+  'stroke',
+  'stroke-width',
+  'stroke-dasharray',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-opacity',
+  'paint-order',
+  'opacity',
+  'filter',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'font-variant-numeric',
+  'text-anchor',
+];
+
+/** Room above an exported tree for its title. */
+const TITLE_SPACE = 56;
+
+/** A browser-safe pixel budget: iOS refuses canvases much larger than 16 megapixels. */
+const MAX_PIXELS = 16_000_000;
+
+let swatch: CanvasRenderingContext2D | null | undefined;
+
+/**
+ * The theme's colours are oklab mixes, which other SVG viewers do not read.
+ * Painting one pixel and reading it back gives plain sRGB with alpha.
+ */
+function solidColor(value: string): string {
+  if (!value || value === 'none' || value.startsWith('url(')) return value;
+  swatch ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  if (!swatch) return value;
+  const sentinel = '#010203';
+  swatch.fillStyle = sentinel;
+  swatch.fillStyle = value;
+  // Left unchanged: the canvas could not parse it either, so keep it as is.
+  if (swatch.fillStyle === sentinel) return value;
+  swatch.clearRect(0, 0, 1, 1);
+  swatch.fillRect(0, 0, 1, 1);
+  const [r = 0, g = 0, b = 0, a = 255] = swatch.getImageData(0, 0, 1, 1).data;
+  return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+}
+
+function dataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Draws an SVG into a PNG, twice as sharp as on screen where the budget allows. */
+async function rasterize(svg: Blob, width: number, height: number): Promise<Blob> {
+  const url = URL.createObjectURL(svg);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const scale = Math.min(2, Math.sqrt(MAX_PIXELS / (width * height)));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve, reject) =>
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('canvas is empty'))), 'image/png'),
+    );
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 type Point = { x: number; y: number };

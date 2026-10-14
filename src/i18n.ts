@@ -51,6 +51,11 @@ const de = {
   noMatches: 'Niemand gefunden.',
   seenBy: (name: string) => `aus Sicht von ${name}`,
   changeViewer: 'Ändern, wer schaut',
+  saveTree: 'Stammbaum speichern',
+  saveHint: 'Der Baum, der gerade zu sehen ist — zum Drucken oder Verschicken.',
+  savePng: 'Bild (PNG)',
+  saveSvg: 'Vektor (SVG)',
+  saveFailed: 'Das Bild ließ sich nicht erstellen.',
 
   dates: 'Geburtstage',
   datesTitle: 'Geburtstage & Jahrestage',
@@ -144,6 +149,11 @@ const en: Dict = {
   noMatches: 'Nobody found.',
   seenBy: (name) => `as seen by ${name}`,
   changeViewer: 'Change who is looking',
+  saveTree: 'Save the tree',
+  saveHint: 'The tree on screen — to print or send around.',
+  savePng: 'Picture (PNG)',
+  saveSvg: 'Vector (SVG)',
+  saveFailed: 'Could not create the picture.',
 
   dates: 'Birthdays',
   datesTitle: 'Birthdays & anniversaries',

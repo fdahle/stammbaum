@@ -461,6 +461,20 @@ function renderMenu(): void {
   dates.append(icon('cake'), t().datesTitle);
   dates.addEventListener('click', () => (menu.open = false));
 
+  const save = document.createElement('div');
+  save.className = 'join w-full';
+  for (const [format, label] of [
+    ['png', t().savePng],
+    ['svg', t().saveSvg],
+  ] as const) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-sm join-item flex-1 btn-ghost bg-base-200';
+    button.append(icon('download'), label);
+    button.addEventListener('click', () => void saveTree(format));
+    save.append(button);
+  }
+
   const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
   menuPanel.replaceChildren(
     group(t().iAm, who, hint(t().iAmHint)),
@@ -486,9 +500,50 @@ function renderMenu(): void {
         },
       ),
     ),
+    group(t().saveTree, save, hint(t().saveHint)),
     find,
     dates,
   );
+}
+
+/** Downloads the tree on screen — or the whole family, from any other screen. */
+async function saveTree(format: 'png' | 'svg'): Promise<void> {
+  menu.open = false;
+  const overview = shownTree ?? tree;
+  const heading = shownTree ? document.title : family.graph.title;
+  try {
+    const blob = await overview.exportImage(format, heading);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${fileName(heading)}.${format}`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+  } catch (error) {
+    console.error(error);
+    toast(t().saveFailed);
+  }
+}
+
+/** "Vorfahren von Nina — Familie Bauer" → "vorfahren-von-nina-familie-bauer". */
+function fileName(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/ß/g, 'ss')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return slug || 'stammbaum';
+}
+
+/** A short message at the bottom of the screen that goes away on its own. */
+function toast(text: string): void {
+  const element = document.createElement('div');
+  element.className = 'toast-note alert alert-error shadow-lg';
+  element.setAttribute('role', 'status');
+  element.textContent = text;
+  document.body.append(element);
+  setTimeout(() => element.remove(), 4000);
 }
 
 function group(label: string, ...content: HTMLElement[]): HTMLElement {
