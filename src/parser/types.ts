@@ -16,6 +16,13 @@ export interface Person {
   note?: string;
   birthplace?: string;
   deathplace?: string;
+  /** Countries as ISO codes (`DE`), or as written when there is none — see countries.ts. */
+  birthcountry?: string;
+  deathcountry?: string;
+  /** The country they live in now, next to `lives`. */
+  country?: string;
+  /** Their nationalities, comma-separated: `DE, NL`. */
+  nationality?: string;
   /** What they do, or did, for a living. */
   job?: string;
   /** Where they live now. */

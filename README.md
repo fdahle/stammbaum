@@ -207,7 +207,8 @@ nina + david together=2012 separated=2018
 | `%% …` | Comment. |
 
 **Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`,
-`birthplace`, `deathplace`, `job`, `lives`, `photos`, `login`.
+`birthplace`, `deathplace`, `job`, `lives`, `photos`, `login`, `birthcountry`,
+`deathcountry`, `country`, `nationality`.
 **Partnership keys** — `married`, `divorced`, `together`, `separated`,
 `children`, `adopted`.
 
@@ -246,6 +247,18 @@ Notes:
   written: `* 2. April 1931 in Lindau`, *Wohnt in Lissabon*. Quote anything
   with spaces: `deathplace="Bad Wörishofen"`. Inside quotes, `\"` is a quote
   and `\\` a backslash: `note="Sagte immer \"Moin\""`.
+- `birthcountry`, `deathcountry` and `country` (where someone lives) go with
+  those places, and `nationality` lists one or more: `birthplace=Lindau
+  birthcountry=DE`, `lives=Lissabon country=PT nationality="DE, PT"`. They are
+  the two-letter ISO codes, shown by name in the app's language — *Deutschland*
+  or *Germany* — and found by search in either. The app writes them that way
+  from whatever is typed ("Norwegen", "Norway", "no"); a country that no
+  longer is one, such as `birthcountry=DDR`, stays as written. The numbers
+  page lists the countries the family was born in and lives in today.
+- A person whose id the app made from their name — `klaus` for *Klaus Bauer* —
+  gets a new one when renamed in the app: a stand-in *Mutter von Felix* named
+  *Birgit Dahle* becomes `birgit` everywhere in the file. Ids written by hand
+  stay as they are.
 - `adopted=<child>, …` lists children of a partnership who were adopted. They
   count as children everywhere — no `->` needed — and their card says so. A
   child may also appear in two partnerships, birth parents and adoptive ones.

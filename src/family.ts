@@ -1,3 +1,5 @@
+import { countryList, countryName } from './countries';
+import { LANGS } from './i18n';
 import type { FamilyGraph, Person, Union } from './parser/types';
 
 export interface Partnership {
@@ -205,8 +207,16 @@ function fields(person: Person): Array<string | undefined> {
     person.job,
     person.born?.slice(0, 4),
     person.deathplace,
+    countries(person),
     person.note,
   ];
+}
+
+/** Every country someone is linked to, by name in each language: found as "Norwegen" and "Norway". */
+function countries(person: Person): string | undefined {
+  const codes = [person.country, person.birthcountry, person.deathcountry, ...countryList(person.nationality)].filter((c): c is string => !!c);
+  if (codes.length === 0) return undefined;
+  return [...new Set(codes.flatMap((code) => LANGS.map(({ id }) => countryName(code, id))))].join(' ');
 }
 
 /** Word starts beat matches inside a word, and earlier fields beat later ones. */

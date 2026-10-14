@@ -10,6 +10,7 @@ import { unionId, type FamilyGraph, type Person, type Union } from './types';
 
 export const PERSON_FIELDS = [
   'name', 'nick', 'maiden', 'sex', 'born', 'died', 'birthplace', 'deathplace', 'job', 'lives', 'note', 'login', 'photo', 'photos',
+  'birthcountry', 'deathcountry', 'country', 'nationality',
 ] as const;
 export type PersonField = (typeof PERSON_FIELDS)[number];
 
@@ -335,7 +336,16 @@ function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Chang
         edits.get(line)!.push(a === keep ? { start: a.start, end: a.end, text: attribute(key, value!) } : cut(line.statement.raw, a.start, a.end));
       }
       if (line === target && value !== null && !keep) {
-        const at = codeEnd(line.statement);
+        // A country goes right after its place, when the line has one — or gets
+        // one in this same change; anything else at the end.
+        const spot = (field: PersonField): number => {
+          const companion = BESIDE[field];
+          if (!companion) return codeEnd(line.statement);
+          const place = line.attributes.find((a) => a.key === companion);
+          if (place) return place.end;
+          return changes.some(([k, v]) => k === companion && v !== null) ? spot(companion) : codeEnd(line.statement);
+        };
+        const at = spot(key);
         edits.get(line)!.push({ start: at, end: at, text: ` ${attribute(key, value)}` });
       }
     }
@@ -383,8 +393,19 @@ function renameId(doc: Doc, from: string, to: string): void {
   }
 }
 
+/** Keys that belong next to another one on the line. */
+const BESIDE: Partial<Record<PersonField, PersonField>> = {
+  birthcountry: 'birthplace',
+  deathcountry: 'deathplace',
+  country: 'lives',
+  nationality: 'country',
+};
+
 /** The order new person lines list their keys in — the order the sample uses. */
-const PERSON_ORDER: PersonField[] = ['sex', 'born', 'died', 'photo', 'photos', 'birthplace', 'deathplace', 'maiden', 'nick', 'job', 'lives', 'login', 'note'];
+const PERSON_ORDER: PersonField[] = [
+  'sex', 'born', 'died', 'photo', 'photos', 'birthplace', 'birthcountry', 'deathplace', 'deathcountry',
+  'maiden', 'nick', 'job', 'lives', 'country', 'nationality', 'login', 'note',
+];
 
 function insertPerson(doc: Doc, id: string, set: Changes<PersonField>, at: number): void {
   const parts = [`person ${id}`, quote(set.name ?? id)];

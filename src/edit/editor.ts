@@ -6,7 +6,7 @@ import { PERSON_FIELDS, personValue, type Changes, type Edit, type PersonField, 
 import { shortName, year } from '../ui/format';
 import { pickPerson } from '../ui/picker';
 import { button, openSheet, sheetActions, type Sheet } from '../ui/sheet';
-import { checkField, choiceField, dateField, INVALID, textField, type Field } from './fields';
+import { checkField, choiceField, countryField, dateField, INVALID, pair, textField, type Field } from './fields';
 import { cropImage } from './crop';
 import { photoChanges, photoNames, pickImages, shrink } from './photos';
 
@@ -57,29 +57,35 @@ function personForm(person: Person | undefined, short = false): PersonForm {
   let deceased: ReturnType<typeof checkField> | undefined;
   let died: Field<string | null | typeof INVALID> | undefined;
   if (!short) {
+    // Every place with its country beside it.
     rest.birthplace = textField(fields.birthplace, person?.birthplace);
+    rest.birthcountry = countryField(fields.country, person?.birthcountry);
     rest.nick = textField(fields.nick, person?.nick);
     rest.maiden = textField(fields.maiden, person?.maiden);
     deceased = checkField(fields.deceased, !!person && isDeceased(person));
     died = dateField(fields.died, person?.died);
     rest.deathplace = textField(fields.deathplace, person?.deathplace);
+    rest.deathcountry = countryField(fields.country, person?.deathcountry);
     const death = document.createElement('div');
     death.className = 'form-group';
-    death.append(died.element, rest.deathplace.element);
+    death.append(died.element, pair(rest.deathplace, rest.deathcountry));
     death.hidden = !deceased.value();
     deceased.onChange((on) => (death.hidden = !on));
     rest.job = textField(fields.job, person?.job);
     rest.lives = textField(fields.lives, person?.lives);
+    rest.country = countryField(fields.country, person?.country);
+    rest.nationality = countryField(fields.nationality, person?.nationality, { multiple: true, hint: t().nationalityHint });
     rest.note = textField(fields.note, person?.note, { multiline: true });
     rest.login = textField(fields.login, person?.login, { hint: t().loginHint });
     element.append(
-      rest.birthplace.element,
+      pair(rest.birthplace, rest.birthcountry),
       rest.nick.element,
       rest.maiden.element,
       deceased.element,
       death,
       rest.job.element,
-      rest.lives.element,
+      pair(rest.lives, rest.country),
+      rest.nationality.element,
       rest.note.element,
       rest.login.element,
     );
@@ -102,7 +108,10 @@ function personForm(person: Person | undefined, short = false): PersonForm {
         // Dead without a date: keep however the file said so (`died=true`), else `?`.
         const undated = person?.died !== undefined && !knownDate(person.died) ? person.died : '?';
         values.died = deceased.value() ? ((death as string | null) ?? undated) : null;
-        if (!deceased.value()) values.deathplace = null;
+        if (!deceased.value()) {
+          values.deathplace = null;
+          values.deathcountry = null;
+        }
       }
       return values;
     },
@@ -440,7 +449,7 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
       const hint = document.createElement('p');
       hint.className = 'form-hint';
       hint.textContent = t().siblingParentsHint(shortName(person));
-      newParents = [textField(t().parentOptional, undefined), textField(t().parentOptional, undefined)];
+      newParents = [textField(t().motherOptional, undefined), textField(t().fatherOptional, undefined)];
       group.append(hint, ...newParents.map((field) => field.element));
       sheet.body.append(group);
     }
@@ -505,10 +514,13 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
         if (shared) {
           parents = shared.value().split('+');
         } else {
-          const names = newParents.map((field) => field.value()).filter((n): n is string => !!n);
-          if (names.length === 0) names.push(t().parentsOf(shortName(person)));
-          parents = names.map((parentName, i) => {
-            edits.push({ kind: 'add-person', ref: `$parent${i}`, set: { name: parentName }, near: { id: person.id, side: 'before' } });
+          // A mother and a father, as named — or stand-ins to name later, whose ids follow once they are.
+          const stand = [
+            { name: newParents[0]?.value() ?? t().motherOf(shortName(person)), sex: 'f' },
+            { name: newParents[1]?.value() ?? t().fatherOf(shortName(person)), sex: 'm' },
+          ];
+          parents = stand.map((parent, i) => {
+            edits.push({ kind: 'add-person', ref: `$parent${i}`, set: parent, near: { id: person.id, side: 'before' } });
             return `$parent${i}`;
           });
           edits.push({ kind: 'add-child', parents, child: person.id });

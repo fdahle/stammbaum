@@ -1,3 +1,4 @@
+import { countryList, countryName } from '../countries';
 import { galleryUrls } from '../data';
 import type { Family } from '../family';
 import { lang, t } from '../i18n';
@@ -198,8 +199,11 @@ function focusCard(
     if (!when && !where && !always) return;
     dates.push([mark, longDate(when), where && t().inPlace(where)].filter(Boolean).join(' '));
   };
-  dated('*', person.born, person.birthplace);
-  dated('†', person.died, person.deathplace, isDeceased(person));
+  // A place and its country: "Lindau, Deutschland", or either alone.
+  const where = (place: string | undefined, country: string | undefined) =>
+    [place, country && countryName(country)].filter(Boolean).join(', ') || undefined;
+  dated('*', person.born, where(person.birthplace, person.birthcountry));
+  dated('†', person.died, where(person.deathplace, person.deathcountry), isDeceased(person));
   if (dates.length > 0) card.append(line('focus-dates', dates.join('\n')));
 
   const age = ageOf(person, now);
@@ -208,7 +212,10 @@ function focusCard(
     const badge = line('focus-birthday badge badge-accent', t().birthdayToday);
     card.append(badge);
   }
-  if (person.lives) card.append(line('focus-lives', t().lives(person.lives)));
+  const home = where(person.lives, person.country);
+  if (home) card.append(line('focus-lives', t().lives(home)));
+  const nationalities = countryList(person.nationality).map((country) => countryName(country));
+  if (nationalities.length > 0) card.append(line('focus-lives', t().nationality(nationalities.join(', '))));
   if (family.adopted(person.id)) card.append(line('focus-adopted', t().adopted));
   if (person.note) card.append(line('focus-note', person.note));
 

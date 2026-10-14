@@ -26,6 +26,9 @@ export interface Stats {
   mostChildren?: { couples: Person[][]; count: number };
   /** The most common of each, all of them on a tie — only when it occurs at least twice. */
   birthplace?: { values: string[]; count: number };
+  /** Every country someone was born in, or lives in now — the most common first. */
+  birthCountries?: string[];
+  homeCountries?: string[];
   surname?: { values: string[]; count: number };
   birthMonth?: { values: number[]; count: number };
 }
@@ -73,6 +76,10 @@ export function familyStats(family: Family, now: DateParts): Stats {
 
   const birthplace = mostCommon(people.map((p) => p.birthplace));
   if (birthplace) stats.birthplace = birthplace;
+  const birthCountries = byFrequency(people.map((p) => p.birthcountry));
+  if (birthCountries.length > 0) stats.birthCountries = birthCountries;
+  const homeCountries = byFrequency(living.map((p) => p.country));
+  if (homeCountries.length > 0) stats.homeCountries = homeCountries;
   const surname = mostCommon(people.map((p) => familyName(p) || undefined));
   if (surname) stats.surname = surname;
   const birthMonth = mostCommon(people.map((p) => parseDate(p.born)?.m));
@@ -130,6 +137,13 @@ function longestMarriage(family: Family, now: DateParts): Stats['longestMarriage
 
 function partnersOf(family: Family, union: Union): Person[] {
   return union.partners.map((id) => family.person(id)).filter((p): p is Person => p !== undefined);
+}
+
+/** Each value once, the most frequent first. */
+function byFrequency(values: Array<string | undefined>): string[] {
+  const counts = new Map<string, number>();
+  for (const value of values) if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1]).map(([value]) => value);
 }
 
 function mostCommon<T>(values: Array<T | undefined>): { values: T[]; count: number } | undefined {

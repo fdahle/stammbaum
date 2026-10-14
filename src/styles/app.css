@@ -1417,6 +1417,14 @@
     border-left: 2px solid var(--color-base-300);
   }
 
+  /* A place with its country next to it; the place gets the room. */
+  .form-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 8px;
+    align-items: start;
+  }
+
   .form-check {
     display: flex;
     align-items: center;

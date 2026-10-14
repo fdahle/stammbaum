@@ -1,4 +1,5 @@
-import { t } from '../i18n';
+import { countryCode, countryList, countryName, countryNames } from '../countries';
+import { lang, t } from '../i18n';
 import { knownDate } from '../parser/types';
 import { parseDate } from '../ui/format';
 
@@ -153,4 +154,49 @@ export function checkField(label: string, checked: boolean): Field<boolean> & { 
     value: () => box.checked,
     onChange: (listener) => box.addEventListener('change', () => listener(box.checked)),
   };
+}
+
+/**
+ * A country, or with `multiple` several: typed by name in either language —
+ * "Deutschland", "Germany", "DE" — with the names to choose from as one
+ * types, and written into the file as codes. One the list does not know
+ * stays as typed: the DDR, say.
+ */
+export function countryField(label: string, value: string | undefined, options: { multiple?: boolean; hint?: string } = {}): Field<string | null> {
+  const id = nextId();
+  const input = document.createElement('input');
+  input.id = id;
+  input.type = 'text';
+  input.className = 'input w-full';
+  input.autocomplete = 'off';
+  input.value = countryList(value).map((country) => countryName(country)).join(', ');
+  // Suggestions for one country at a time; several are typed with commas.
+  if (!options.multiple) input.setAttribute('list', countrySuggestions());
+  return {
+    element: labelled(label, input, id, options.hint),
+    value: () => {
+      const codes = (options.multiple ? countryList(input.value) : [input.value]).map(countryCode).filter(Boolean);
+      return codes.length > 0 ? codes.join(', ') : null;
+    },
+  };
+}
+
+/** One list of country names per language, shared by every country field. */
+function countrySuggestions(): string {
+  const id = `countries-${lang()}`;
+  if (!document.getElementById(id)) {
+    const list = document.createElement('datalist');
+    list.id = id;
+    for (const name of countryNames()) list.append(new Option(name));
+    document.body.append(list);
+  }
+  return id;
+}
+
+/** Two fields side by side: a place and its country. */
+export function pair(...fields: Array<Field<unknown>>): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'form-pair';
+  row.append(...fields.map((field) => field.element));
+  return row;
 }

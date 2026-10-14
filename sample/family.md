@@ -10,7 +10,7 @@ the app picks up instead whenever it exists — see the README.
 
 | Statement | Meaning |
 | --- | --- |
-| `person <id> "<Name>" key=value ...` | declares a person. Keys: `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex` (`m` or `f`), `birthplace`, `deathplace`, `job`, `lives`, `photos`, `login` |
+| `person <id> "<Name>" key=value ...` | declares a person. Keys: `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex` (`m` or `f`), `birthplace`, `deathplace`, `job`, `lives`, `photos`, `login`, `birthcountry`, `deathcountry`, `country` (where they live), `nationality` — countries as ISO codes: `DE`, `PT` |
 | `<a> + <b> married=1956 divorced=1974` | a partnership. Remarriage = a second `+` line with the new partner |
 | `<a> + <b> together=2015 separated=2020` | an unmarried couple — `together` instead of `married`, `separated` instead of `divorced` |
 | `<a> + <b> divorced=?` | `?` or `true` instead of a date: it happened, the year is unknown or nobody's business — no year is shown |
@@ -30,7 +30,7 @@ Photos are file names inside the `photos/` folder next to this file.
 me jonas
 
 %% ---- Generation 1 -------------------------------------------------------
-person heinrich  "Heinrich Bauer"    sex=m born=1931-04-02 died=2011-08-17 photo=heinrich.svg photos=haus-lindau.svg birthplace=Lindau deathplace=Lindau job=Schreiner note="Baute das Haus in Lindau."
+person heinrich  "Heinrich Bauer"    sex=m born=1931-04-02 died=2011-08-17 photo=heinrich.svg photos=haus-lindau.svg birthplace=Lindau birthcountry=DE deathplace=Lindau deathcountry=DE job=Schreiner note="Baute das Haus in Lindau."
 person elisabeth "Elisabeth Bauer"   sex=f born=1934-11-23 maiden=Vogt photo=elisabeth.svg nick=Oma birthplace=Kempten lives=Lindau
 person werner    "Werner Schmitt"    sex=m born=1935-06-30 died=2019-02-11
 person ingrid    "Ingrid Schmitt"    sex=f born=1939-09-08 maiden=Hoffmann photo=ingrid.svg
@@ -41,7 +41,7 @@ werner + ingrid married=1960 -> sabine, thomas
 %% ---- Generation 2 -------------------------------------------------------
 person klaus    "Klaus Bauer"        sex=m born=1958-01-14 job=Lehrer lives=Lindau note="Erzählt jedes Jahr dieselbe Bootsgeschichte."
 person sabine   "Sabine Schmitt"     sex=f born=1962-07-21
-person carmen   "Carmen Bauer"       sex=f born=1968-03-05 maiden=Ortiz
+person carmen   "Carmen Bauer"       sex=f born=1968-03-05 maiden=Ortiz birthcountry=ES nationality="ES, DE"
 person brigitte "Brigitte Keller"    sex=f born=1961-10-02 maiden=Bauer
 person martin   "Martin Keller"      sex=m born=1959-12-19
 person thomas   "Thomas Schmitt"     sex=m born=1965-04-27 nick=Tommy
@@ -57,7 +57,7 @@ thomas + petra married=1992 adopted=marie
 %% ---- Generation 3 -------------------------------------------------------
 person nina  "Nina Falk"    sex=f born=1986-02-17 maiden=Bauer
 person tim   "Tim Falk"     sex=m born=1984-11-04
-person jonas "Jonas Bauer"  sex=m born=1989-05-23 lives=Lissabon job=Architekt login=jonas
+person jonas "Jonas Bauer"  sex=m born=1989-05-23 lives=Lissabon country=PT job=Architekt login=jonas
 person luca  "Luca Bauer"   sex=m born=2003-07-12
 person felix "Felix Keller" sex=m born=1990-03-31
 person ayla  "Ayla Keller"  sex=f born=1991-01-25 maiden=Demir
