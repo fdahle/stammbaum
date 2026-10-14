@@ -52,6 +52,15 @@ const de = {
   seenBy: (name: string) => `aus Sicht von ${name}`,
   changeViewer: 'Ändern, wer schaut',
 
+  dates: 'Geburtstage',
+  datesTitle: 'Geburtstage & Jahrestage',
+  datesSpan: (days: number) => `Die nächsten ${days} Tage`,
+  datesNone: 'In dieser Zeit steht nichts an.',
+  turns: (years: number) => `wird ${years}`,
+  anniversary: (kind: 'married' | 'together', years: number) =>
+    kind === 'married' ? `${years}. Hochzeitstag` : `${years} ${years === 1 ? 'Jahr' : 'Jahre'} zusammen`,
+  inDays: (days: number) => (days === 0 ? 'heute' : days === 1 ? 'morgen' : `in ${days} Tagen`),
+
   fit: 'Ganzen Stammbaum zeigen',
   ancestorsOf: (name: string) => `Vorfahren von ${name}`,
   descendantsOf: (name: string) => `Nachkommen von ${name}`,
@@ -136,6 +145,15 @@ const en: Dict = {
   seenBy: (name) => `as seen by ${name}`,
   changeViewer: 'Change who is looking',
 
+  dates: 'Birthdays',
+  datesTitle: 'Birthdays & anniversaries',
+  datesSpan: (days) => `The next ${days} days`,
+  datesNone: 'Nothing coming up.',
+  turns: (years) => `turns ${years}`,
+  anniversary: (kind, years) =>
+    kind === 'married' ? `${ordinal(years)} wedding anniversary` : `${years} ${years === 1 ? 'year' : 'years'} together`,
+  inDays: (days) => (days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`),
+
   fit: 'Show the whole tree',
   ancestorsOf: (name) => `Ancestors of ${name}`,
   descendantsOf: (name) => `Descendants of ${name}`,
@@ -179,6 +197,13 @@ const en: Dict = {
   change: 'Change',
   swap: 'Swap',
 };
+
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st. */
+function ordinal(n: number): string {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  const suffix = teen ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+  return `${n}${suffix}`;
+}
 
 const DICTS: Record<Lang, Dict> = { de, en };
 

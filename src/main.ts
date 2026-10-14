@@ -1,15 +1,17 @@
 import './styles/app.css';
 
+import { upcoming } from './calendar';
 import { loadFamily } from './data';
 import { Family } from './family';
 import { LANGS, lang, setLang, t } from './i18n';
 import { relation } from './kinship';
 import type { Person } from './parser/types';
-import { lifespan, shortName } from './ui/format';
+import { lifespan, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
 import { pickPerson } from './ui/picker';
 import { readStored, writeStored } from './ui/storage';
 import { bubble } from './ui/tile';
+import { renderDates } from './views/dates';
 import { OverviewView } from './views/overview';
 import { renderPerson } from './views/person';
 import { renderRelation, route as relationRoute } from './views/relation';
@@ -160,11 +162,17 @@ async function findRelation(): Promise<void> {
 // ---- routing --------------------------------------------------------------
 
 type Route =
-  | { kind: 'tree' }
+  | { kind: 'tree' | 'dates' }
   | { kind: 'up' | 'down' | 'person'; person: Person }
   | { kind: 'relation' | 'path'; a: Person; b: Person };
 
-/** `#/`, `#/p/klaus`, `#/up/klaus`, `#/down/klaus`, `#/r/jonas/felix`, `#/path/jonas/felix`. */
+/** How far ahead the birthday list looks. */
+const DATES_SPAN = 30;
+
+/**
+ * `#/`, `#/p/klaus`, `#/up/klaus`, `#/down/klaus`, `#/r/jonas/felix`,
+ * `#/path/jonas/felix`, `#/dates`.
+ */
 function parseRoute(hash: string): Route | undefined {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const people = parts.slice(1).map((part) => {
@@ -176,6 +184,7 @@ function parseRoute(hash: string): Route | undefined {
   });
   const [kind] = parts;
   if (kind === undefined) return { kind: 'tree' };
+  if (kind === 'dates' && parts.length === 1) return { kind };
   if (people.some((p) => !p)) return undefined;
   const [a, b] = people as Person[];
   if ((kind === 'p' || kind === 'up' || kind === 'down') && a && !b) {
@@ -244,6 +253,9 @@ function render(): void {
       document.title = `${shortName(a)} & ${shortName(b)} — ${family.graph.title}`;
       return;
     }
+    case 'dates':
+      showPage(renderDates(upcoming(family, today(), DATES_SPAN), DATES_SPAN, caption), t().datesTitle);
+      return;
     case 'tree':
       showTree(tree, undefined, undefined, viewer());
       tree.emphasize(undefined);
@@ -265,6 +277,13 @@ function render(): void {
       return;
     }
   }
+}
+
+/** Puts one of the list pages on screen. */
+function showPage(page: HTMLElement, title: string): void {
+  view.replaceChildren(page);
+  view.scrollTop = 0;
+  document.title = `${title} — ${family.graph.title}`;
 }
 
 /**
@@ -436,6 +455,12 @@ function renderMenu(): void {
   find.append(icon('link'), t().findRelation);
   find.addEventListener('click', () => void findRelation());
 
+  const dates = document.createElement('a');
+  dates.href = '#/dates';
+  dates.className = 'btn btn-soft btn-primary btn-sm w-full';
+  dates.append(icon('cake'), t().datesTitle);
+  dates.addEventListener('click', () => (menu.open = false));
+
   const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
   menuPanel.replaceChildren(
     group(t().iAm, who, hint(t().iAmHint)),
@@ -462,6 +487,7 @@ function renderMenu(): void {
       ),
     ),
     find,
+    dates,
   );
 }
 

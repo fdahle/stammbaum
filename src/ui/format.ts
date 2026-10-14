@@ -91,7 +91,7 @@ export function yearsBetween(from: DateParts, until: DateParts): { years: number
 }
 
 /** Nobody in a family file is that old — a death date is simply missing. */
-const OLDEST = 110;
+export const OLDEST = 110;
 
 /** How old someone is, or was when they died. */
 export function ageOf(person: Person, now: DateParts): { years: number; approx: boolean; final: boolean } | undefined {
