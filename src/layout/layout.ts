@@ -157,12 +157,31 @@ export function layoutFamily(graph: FamilyGraph): Layout {
     return cluster;
   };
 
-  // Oldest generation first so the tree grows downwards from its roots.
-  const roots = [...graph.people.keys()].sort(
+  // Oldest generation first so the tree grows downwards from its roots — but
+  // a family whose child is already on the page, married into it, comes next,
+  // right beside that child: in-laws' parents and siblings then stand over
+  // them, instead of across someone else's branch.
+  const pending = [...graph.people.keys()].sort(
     (a, b) => (generation.get(a) ?? 0) - (generation.get(b) ?? 0),
   );
+  const attached = (id: string): number => {
+    if (hasParents.has(id)) return -Infinity;
+    const placed = (unionsByPerson.get(id) ?? []).flatMap((u) => u.children).map((child) => nodes.get(child)?.x);
+    return Math.max(-Infinity, ...placed.filter((x): x is number => x !== undefined));
+  };
   let cursor = 0;
-  for (const id of roots) {
+  while (pending.length > 0) {
+    // The family whose child sits furthest right goes next; with none, the oldest left.
+    let next = 0;
+    let best = -Infinity;
+    pending.forEach((id, i) => {
+      const x = nodes.has(id) ? -Infinity : attached(id);
+      if (x > best) {
+        best = x;
+        next = i;
+      }
+    });
+    const id = pending.splice(next, 1)[0]!;
     if (nodes.has(id)) continue;
     const cluster = place(id, cursor);
     if (cluster.ids.length > 0) cursor = cluster.max + METRICS.clusterGap + step;
