@@ -53,6 +53,14 @@ export function layoutFamily(graph: FamilyGraph): Layout {
     }
   }
 
+  // Brothers and sisters who married someone with a family of their own in
+  // the file go last: their partner is placed to their right, and that
+  // family further right still, so nobody else stands between the two.
+  const hasParents = new Set(graph.unions.flatMap((u) => u.children));
+  const marriedOut = (id: string) =>
+    (unionsByPerson.get(id) ?? []).some((u) => u.partners.some((p) => p !== id && hasParents.has(p)));
+  const inOrder = (children: string[]) => [...children].sort((a, b) => Number(marriedOut(a)) - Number(marriedOut(b)));
+
   const nodes = new Map<string, NodeBox>();
   const placedUnions = new Set<string>();
   const step = METRICS.nodeWidth + METRICS.nodeGap;
@@ -84,7 +92,8 @@ export function layoutFamily(graph: FamilyGraph): Layout {
     } else {
       row.push(id, ...spouses.slice(unions.length >= 2 ? 1 : 0));
     }
-    const rowIds = row.filter((r): r is string => r !== undefined && (r === id || !nodes.has(r)));
+    // A couple married twice names the same partner twice; they get one bubble.
+    const rowIds = [...new Set(row.filter((r): r is string => r !== undefined && (r === id || !nodes.has(r))))];
 
     // Children first: they decide how wide this cluster is.
     const groups: Array<{ union: Union; ids: string[]; min: number; max: number }> = [];
@@ -93,7 +102,7 @@ export function layoutFamily(graph: FamilyGraph): Layout {
       const ids: string[] = [];
       let min = Infinity;
       let max = -Infinity;
-      for (const child of union.children) {
+      for (const child of inOrder(union.children)) {
         if (nodes.has(child)) continue;
         const sub = place(child, cursor);
         if (sub.ids.length === 0) continue;
@@ -148,12 +157,31 @@ export function layoutFamily(graph: FamilyGraph): Layout {
     return cluster;
   };
 
-  // Oldest generation first so the tree grows downwards from its roots.
-  const roots = [...graph.people.keys()].sort(
+  // Oldest generation first so the tree grows downwards from its roots — but
+  // a family whose child is already on the page, married into it, comes next,
+  // right beside that child: in-laws' parents and siblings then stand over
+  // them, instead of across someone else's branch.
+  const pending = [...graph.people.keys()].sort(
     (a, b) => (generation.get(a) ?? 0) - (generation.get(b) ?? 0),
   );
+  const attached = (id: string): number => {
+    if (hasParents.has(id)) return -Infinity;
+    const placed = (unionsByPerson.get(id) ?? []).flatMap((u) => u.children).map((child) => nodes.get(child)?.x);
+    return Math.max(-Infinity, ...placed.filter((x): x is number => x !== undefined));
+  };
   let cursor = 0;
-  for (const id of roots) {
+  while (pending.length > 0) {
+    // The family whose child sits furthest right goes next; with none, the oldest left.
+    let next = 0;
+    let best = -Infinity;
+    pending.forEach((id, i) => {
+      const x = nodes.has(id) ? -Infinity : attached(id);
+      if (x > best) {
+        best = x;
+        next = i;
+      }
+    });
+    const id = pending.splice(next, 1)[0]!;
     if (nodes.has(id)) continue;
     const cluster = place(id, cursor);
     if (cluster.ids.length > 0) cursor = cluster.max + METRICS.clusterGap + step;
@@ -210,6 +238,9 @@ function refine(nodes: Map<string, NodeBox>, unions: Union[], passes = 24): void
     for (const generation of order) {
       const row = rows.get(generation)!;
       for (const block of blocksOf(row, unions)) {
+        // A block stands shoulder to shoulder, around where it already is.
+        const centre = average(block.map((node) => node.x));
+        block.forEach((node, i) => (node.x = centre + (i - (block.length - 1) / 2) * step));
         const shifts: number[] = [];
         for (const node of block) {
           const above = parentUnion.get(node.id);
@@ -236,16 +267,27 @@ function refine(nodes: Map<string, NodeBox>, unions: Union[], passes = 24): void
   }
 }
 
-/** Splits a row into blocks of married-and-adjacent people that move together. */
+/**
+ * Splits a row into blocks that move together: couples side by side, and a
+ * brother or sister with no family of their own next to the sibling beside
+ * them — so they stay together instead of drifting off towards their parents
+ * when that sibling has married into another family.
+ */
 function blocksOf(row: NodeBox[], unions: Union[]): NodeBox[][] {
   const married = new Set(
     unions.flatMap((u) => (u.partners.length === 2 ? [u.partners.slice().sort().join('+')] : [])),
   );
+  const parentsOf = new Map<string, string>();
+  for (const union of unions) for (const child of union.children) parentsOf.set(child, union.id);
+  const ownFamily = new Set(unions.flatMap((u) => u.partners));
+  const together = (a: string, b: string) =>
+    married.has([a, b].sort().join('+')) ||
+    (parentsOf.get(a) !== undefined && parentsOf.get(a) === parentsOf.get(b) && (!ownFamily.has(a) || !ownFamily.has(b)));
   const blocks: NodeBox[][] = [];
   let current: NodeBox[] = [];
   for (const node of row) {
     const previous = current[current.length - 1];
-    if (previous && married.has([previous.id, node.id].sort().join('+'))) current.push(node);
+    if (previous && together(previous.id, node.id)) current.push(node);
     else {
       if (current.length > 0) blocks.push(current);
       current = [node];
@@ -267,30 +309,47 @@ function average(values: number[]): number {
 }
 
 /**
- * Longest-path generation numbering: every child sits at least one row below
- * both of its parents, and partners are pulled onto the same row.
+ * Generation numbering. Rows only ever move down, until nothing changes:
+ *
+ * - every child sits at least one row below both of its parents,
+ * - partners share a row,
+ * - brothers and sisters share a row — one who married into a younger
+ *   generation takes the others along, rather than leaving them stranded
+ *   rows above,
+ * - and people with no parents in the file sit right above their children
+ *   instead of up on the first row: someone's in-laws belong over them, not
+ *   at the top of the page with a line running down past everyone between.
  */
-function assignGenerations(graph: FamilyGraph): Map<string, number> {
+export function assignGenerations(graph: FamilyGraph): Map<string, number> {
   const generation = new Map<string, number>();
   for (const id of graph.people.keys()) generation.set(id, 0);
+  const gen = (id: string) => generation.get(id) ?? 0;
+  const hasParents = new Set(graph.unions.flatMap((u) => u.children));
+
+  let changed = false;
+  const lower = (id: string, to: number) => {
+    if (gen(id) < to) {
+      generation.set(id, to);
+      changed = true;
+    }
+  };
 
   const limit = graph.people.size * 2 + 10;
   for (let pass = 0; pass < limit; pass++) {
-    let changed = false;
+    changed = false;
     for (const union of graph.unions) {
-      const partnerGen = Math.max(...union.partners.map((p) => generation.get(p) ?? 0));
-      for (const partner of union.partners) {
-        if ((generation.get(partner) ?? 0) < partnerGen) {
-          generation.set(partner, partnerGen);
-          changed = true;
-        }
-      }
-      for (const child of union.children) {
-        if ((generation.get(child) ?? 0) < partnerGen + 1) {
-          generation.set(child, partnerGen + 1);
-          changed = true;
-        }
-      }
+      const partnerGen = Math.max(...union.partners.map(gen));
+      for (const partner of union.partners) lower(partner, partnerGen);
+      const childGen = Math.max(partnerGen + 1, ...union.children.map(gen));
+      for (const child of union.children) lower(child, childGen);
+    }
+    // Parents of their own nobody knows: down to just above their nearest children.
+    for (const id of graph.people.keys()) {
+      if (hasParents.has(id)) continue;
+      const own = graph.unions.filter((u) => u.partners.includes(id) && u.children.length > 0);
+      // A partner with parents in the file keeps the couple where it is.
+      if (own.length === 0 || own.some((u) => u.partners.some((p) => hasParents.has(p)))) continue;
+      lower(id, Math.min(...own.flatMap((u) => u.children.map(gen))) - 1);
     }
     if (!changed) break;
   }

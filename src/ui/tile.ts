@@ -1,5 +1,5 @@
 import { photoUrl } from '../data';
-import type { Person } from '../parser/types';
+import { isDeceased, type Person } from '../parser/types';
 import { avatarHue, familyName, initials, lifespan, shortName } from './format';
 
 /** The photo bubble on its own — shared by every HTML view. Size comes from CSS. */
@@ -28,7 +28,7 @@ export function bubble(person: Person): HTMLElement {
 /** A clickable person: bubble, name, years — and how they are related, if known. */
 export function tile(person: Person, relation?: string): HTMLAnchorElement {
   const link = document.createElement('a');
-  link.className = `tile${person.died ? ' is-deceased' : ''}`;
+  link.className = `tile${isDeceased(person) ? ' is-deceased' : ''}`;
   link.href = `#/p/${encodeURIComponent(person.id)}`;
   link.append(bubble(person));
 

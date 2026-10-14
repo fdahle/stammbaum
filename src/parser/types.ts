@@ -14,13 +14,39 @@ export interface Person {
   /** Nickname — what the family actually calls them. */
   nick?: string;
   note?: string;
+  birthplace?: string;
+  deathplace?: string;
+  /** Countries as ISO codes (`DE`), or as written when there is none — see countries.ts. */
+  birthcountry?: string;
+  deathcountry?: string;
+  /** The country they live in now, next to `lives`. */
+  country?: string;
+  /** Their nationalities, comma-separated: `DE, NL`. */
+  nationality?: string;
+  /** What they do, or did, for a living. */
+  job?: string;
+  /** Where they live now. */
+  lives?: string;
+  /** More pictures for the gallery in the detail view, next to `photo`. */
+  photos?: string[];
   /** True when the person was only referenced by a relation, never declared. */
   stub?: boolean;
+  /** Where the `person` line is in family.md, for warnings about them. */
+  line?: number;
+}
+
+/** `died=1990`, but also `died=?` or `died=true` when nobody knows when. */
+export function isDeceased(person: Person): boolean {
+  return person.died !== undefined;
 }
 
 export type Sex = 'm' | 'f';
 
-/** A partnership. Divorce and remarriage are modelled as separate unions. */
+/**
+ * A partnership. Divorce and remarriage are modelled as separate unions — even
+ * when the same two people marry again, which gives the second one an id of
+ * `a+b~2`.
+ */
 export interface Union {
   id: string;
   /** One or two people. A single partner means "other parent unknown". */
@@ -32,6 +58,10 @@ export interface Union {
   /** End of an unmarried relationship — `separated` instead of `divorced`. */
   separated?: string;
   children: string[];
+  /** The children who were adopted — every one of them is in `children` too. */
+  adopted?: string[];
+  /** The family.md lines that make up this partnership, for the writer. */
+  lines?: number[];
 }
 
 /**
@@ -49,24 +79,25 @@ export function unionStatus(union: Union): UnionStatus {
 }
 
 /**
- * `divorced=true`, `together=?`, a bare `married=` — the partnership is a fact,
- * the date is unknown or beside the point. The state still counts; the date is
- * simply not there, so nothing is printed for it.
+ * `divorced=true`, `died=?`, a bare `married=` — the event is a fact, the date
+ * is unknown or beside the point. The state still counts; the date is simply
+ * not there, so nothing is printed for it.
  */
 const UNDATED = new Set(['', '?', 'true', 'yes', 'ja', 'x']);
 
-function date(value: string | undefined): string | undefined {
+/** The date as written, or `undefined` when there is none to print. */
+export function knownDate(value: string | undefined): string | undefined {
   return value === undefined || UNDATED.has(value.toLowerCase()) ? undefined : value;
 }
 
 /** When the partnership began, whether or not it was a marriage. */
 export function unionStart(union: Union): string | undefined {
-  return date(union.married) ?? date(union.together);
+  return knownDate(union.married) ?? knownDate(union.together);
 }
 
 /** When it ended, or `undefined` while it lasts — or while the date is unknown. */
 export function unionEnd(union: Union): string | undefined {
-  return date(union.divorced) ?? date(union.separated);
+  return knownDate(union.divorced) ?? knownDate(union.separated);
 }
 
 export interface Diagnostic {

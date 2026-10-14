@@ -1,6 +1,12 @@
+import { countryLabel, countryList } from '../countries';
+import { placeName } from '../places';
+import { galleryUrls } from '../data';
 import type { Family } from '../family';
+import { lang, t } from '../i18n';
 import { relation } from '../kinship';
 import {
+  isDeceased,
+  knownDate,
   unionEnd,
   unionStart,
   unionStatus,
@@ -9,17 +15,27 @@ import {
   type UnionStatus,
 } from '../parser/types';
 import { bubble, tile } from '../ui/tile';
-import { longDate, shortName, year } from '../ui/format';
-import { weddingRings, RINGS } from '../ui/icons';
+import { ageOf, displayName, hasBirthday, longDate, parseDate, shortName, today, year, yearsBetween } from '../ui/format';
+import { icon, weddingRings, RINGS, type IconName } from '../ui/icons';
+import { openLightbox } from '../ui/lightbox';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+export interface PersonContext {
+  /** Who is looking: everyone is captioned with what they are to this person. */
+  viewer: string | undefined;
+  /** Asks who to compare `person` with, then shows how the two are related. */
+  pickRelative(person: Person): void;
+  /** Opens the editor for `person` — only there when whoever is looking may edit. */
+  edit?: ((person: Person) => void) | undefined;
+}
 
 /**
  * One person and their first-degree relatives: parents above, partners beside,
  * children below. Connectors are drawn into an SVG overlay after layout, so
  * they stay correct however the rows wrap on a phone.
  */
-export function renderPerson(family: Family, person: Person): HTMLElement {
+export function renderPerson(family: Family, person: Person, context: PersonContext): HTMLElement {
   const root = document.createElement('article');
   root.className = 'person-view';
 
@@ -30,13 +46,13 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   const parents = family.parents(person.id);
   const partnerships = family.partnerships(person.id);
   const broods = family.broods(person.id);
-  // Everyone is captioned with what they are to the file's `me`.
-  const me = family.me();
-  const kin = (other: Person) => (me ? relation(family, me.id, other.id) : undefined);
+  // Everyone is captioned with what they are to whoever is looking.
+  const { viewer } = context;
+  const kin = (other: Person) => (viewer ? relation(family, viewer, other.id, lang()) : undefined);
 
   const parentTiles: HTMLElement[] = [];
   if (parents.length > 0) {
-    const tier = section('tier tier-parents', 'Eltern');
+    const tier = section('tier tier-parents', t().parents);
     const row = document.createElement('div');
     row.className = 'row';
     for (const parent of parents) {
@@ -56,20 +72,29 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   left.className = 'partner-slot slot-left';
   const right = document.createElement('div');
   right.className = 'partner-slot slot-right';
-  const card = focusCard(person, kin(person));
+  const card = focusCard(family, person, kin(person), context);
   focusTier.append(left, card, right);
   root.append(focusTier);
 
+  // Someone married to the same person twice gets one tile with both pills.
+  const byPartner = new Map<string, { partner: Person; unions: Union[] }>();
+  for (const { union, partner } of partnerships) {
+    if (!partner) continue;
+    const entry = byPartner.get(partner.id) ?? { partner, unions: [] };
+    entry.unions.push(union);
+    byPartner.set(partner.id, entry);
+  }
+  /** Keyed by union, so a couple married twice shares one element under both ids. */
   const partnerTiles = new Map<string, HTMLElement>();
-  partnerships.forEach(({ union, partner }, index) => {
-    if (!partner) return;
+  [...byPartner.values()].forEach(({ partner, unions }, index) => {
     const element = document.createElement('div');
     element.className = 'partner';
-    // The connector is drawn later, from the geometry — it reads the state here.
-    element.dataset.status = unionStatus(union);
-    element.append(tile(partner, kin(partner)), relationPill(union));
-    partnerTiles.set(union.id, element);
-    (index === 0 && partnerships.length > 1 ? left : right).append(element);
+    // The connector is drawn later, from the geometry — it reads the state of
+    // the latest partnership here.
+    element.dataset.status = unionStatus(unions[unions.length - 1]!);
+    element.append(tile(partner, kin(partner)), ...unions.map(relationPill));
+    for (const union of unions) partnerTiles.set(union.id, element);
+    (index === 0 && byPartner.size > 1 ? left : right).append(element);
   });
   // Narrow screens drop the partners below the card; the CSS needs to know
   // which side is actually occupied to keep a single partner centred.
@@ -78,7 +103,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
 
   const broodTiles: Array<{ union: Union; tiles: HTMLElement[] }> = [];
   if (broods.length > 0) {
-    const tier = section('tier tier-children', broods.flatMap((b) => b.children).length === 1 ? 'Kind' : 'Kinder');
+    const tier = section('tier tier-children', broods.flatMap((b) => b.children).length === 1 ? t().child : t().children);
     const groups = document.createElement('div');
     groups.className = 'broods';
     for (const brood of broods) {
@@ -87,7 +112,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
       if (broods.length > 1 && brood.partner) {
         const caption = document.createElement('span');
         caption.className = 'brood-label';
-        caption.textContent = `mit ${shortName(brood.partner)}`;
+        caption.textContent = t().withPartner(shortName(brood.partner));
         group.append(caption);
       }
       const row = document.createElement('div');
@@ -105,10 +130,35 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
     root.append(tier);
   }
 
+  // Brothers and sisters last, without wires: the children's hang in between.
+  const siblings = family.siblings(person.id);
+  if (siblings.length > 0) {
+    const tier = section('tier tier-siblings', siblings.length === 1 ? t().sibling : t().siblings);
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const { person: sibling, half } of siblings) {
+      const element = tile(sibling, kin(sibling));
+      // Looking at oneself, the caption already says so.
+      if (half && viewer !== person.id) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'partner';
+        const pill = document.createElement('span');
+        pill.className = 'relation-pill badge badge-sm badge-soft';
+        pill.textContent = t().halfSibling(sibling.sex);
+        wrapper.append(element, pill);
+        row.append(wrapper);
+      } else {
+        row.append(element);
+      }
+    }
+    tier.append(row);
+    root.append(tier);
+  }
+
   if (parents.length === 0 && partnerships.length === 0 && broods.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'opacity-60';
-    empty.textContent = 'Keine Verwandten in der Datei hinterlegt.';
+    empty.textContent = t().noRelatives;
     root.append(empty);
   }
 
@@ -128,28 +178,125 @@ function section(className: string, label: string): HTMLElement {
   return element;
 }
 
-function focusCard(person: Person, relation: string | undefined): HTMLElement {
+function focusCard(
+  family: Family,
+  person: Person,
+  relation: string | undefined,
+  context: PersonContext,
+): HTMLElement {
   const card = document.createElement('div');
-  card.className = `focus-card card bg-base-100 shadow-sm${person.died ? ' is-deceased' : ''}`;
-  card.append(bubble(person));
+  card.className = `focus-card card bg-base-100 shadow-sm${isDeceased(person) ? ' is-deceased' : ''}`;
+  const portrait = bubble(person);
+  card.append(portrait);
+  // Editing sits quietly in the corner, for whoever may.
+  const { edit } = context;
+  if (edit) {
+    const pen = document.createElement('button');
+    pen.type = 'button';
+    pen.className = 'focus-edit btn btn-ghost btn-circle btn-sm';
+    pen.title = t().edit;
+    pen.setAttribute('aria-label', t().editTitle(person.name));
+    pen.append(icon('pencil'));
+    pen.addEventListener('click', () => edit(person));
+    card.append(pen);
+  }
 
   const name = document.createElement('h1');
   name.className = 'focus-name';
-  name.textContent = person.name;
+  name.textContent = displayName(person);
   card.append(name);
   if (relation) card.append(line('focus-relation', relation));
 
-  if (person.nick && person.nick !== shortName(person)) {
-    card.append(line('focus-nick', `„${person.nick}“`));
-  }
-  if (person.maiden) card.append(line('focus-maiden', `geb. ${person.maiden}`));
+  if (person.maiden) card.append(line('focus-maiden', t().nee(person.maiden)));
+  if (person.job) card.append(line('focus-job', person.job));
 
+  const now = today();
   const dates: string[] = [];
-  if (person.born) dates.push(`* ${longDate(person.born)}`);
-  if (person.died) dates.push(`† ${longDate(person.died)}`);
-  if (dates.length > 0) card.append(line('focus-dates', dates.join('   ')));
+  // `* 2. April 1931 in Lindau` — the date, the place, or both. A death with
+  // neither still gets its cross.
+  const dated = (mark: string, date: string | undefined, where: string | undefined, always = false) => {
+    const when = knownDate(date);
+    if (!when && !where && !always) return;
+    dates.push([mark, longDate(when), where && t().inPlace(where)].filter(Boolean).join(' '));
+  };
+  // A place and its country: "Lindau, Deutschland", or either alone.
+  const where = (place: string | undefined, country: string | undefined) =>
+    [place && placeName(place), country && countryLabel(country)].filter(Boolean).join(', ') || undefined;
+  dated('*', person.born, where(person.birthplace, person.birthcountry));
+  dated('†', person.died, where(person.deathplace, person.deathcountry), isDeceased(person));
+  if (dates.length > 0) card.append(line('focus-dates', dates.join('\n')));
+
+  const age = ageOf(person, now);
+  if (age) card.append(line('focus-age', age.final ? t().ageAtDeath(age.years, age.approx) : t().age(age.years, age.approx)));
+  if (hasBirthday(person, now)) {
+    const badge = line('focus-birthday badge badge-accent', t().birthdayToday);
+    card.append(badge);
+  }
+  const home = where(person.lives, person.country);
+  if (home) card.append(line('focus-lives', t().lives(home)));
+  const nationalities = countryList(person.nationality).map((country) => countryLabel(country));
+  if (nationalities.length > 0) card.append(line('focus-lives', t().nationality(nationalities.join(', '))));
+  if (family.adopted(person.id)) card.append(line('focus-adopted', t().adopted));
   if (person.note) card.append(line('focus-note', person.note));
+
+  const pictures = galleryUrls(person);
+  if (pictures.length > 0) {
+    portrait.classList.add('is-zoomable');
+    portrait.addEventListener('click', () => openLightbox(pictures, 0, person.name));
+  }
+  if (pictures.length > 1) {
+    const gallery = document.createElement('div');
+    gallery.className = 'focus-gallery';
+    pictures.forEach((url, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'gallery-thumb';
+      button.setAttribute('aria-label', t().photo(index + 1, pictures.length));
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = '';
+      image.loading = 'lazy';
+      button.append(image);
+      button.addEventListener('click', () => openLightbox(pictures, index, person.name));
+      gallery.append(button);
+    });
+    card.append(gallery);
+  }
+
+  card.append(actions(family, person, context));
   return card;
+}
+
+/** What can be done from here: other views of this person and their family. */
+function actions(family: Family, person: Person, context: PersonContext): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'focus-actions';
+  // A link where there is a place to go, a button where something happens.
+  const add = (iconName: IconName, label: string, target: string | (() => void)) => {
+    let element: HTMLElement;
+    if (typeof target === 'string') {
+      const link = document.createElement('a');
+      link.href = target;
+      element = link;
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.addEventListener('click', target);
+      element = button;
+    }
+    element.className = 'btn btn-sm btn-soft btn-primary';
+    element.append(icon(iconName), label);
+    row.append(element);
+  };
+  const id = encodeURIComponent(person.id);
+
+  if (context.viewer && context.viewer !== person.id) {
+    add('link', t().howAreWeRelated, `#/r/${encodeURIComponent(context.viewer)}/${id}`);
+  }
+  add('link', t().relatedTo, () => context.pickRelative(person));
+  if (family.parents(person.id).length > 0) add('up', t().ancestors, `#/up/${id}`);
+  if (family.children(person.id).length > 0) add('down', t().descendants, `#/down/${id}`);
+  return row;
 }
 
 function line(className: string, text: string): HTMLElement {
@@ -159,17 +306,18 @@ function line(className: string, text: string): HTMLElement {
   return element;
 }
 
-/** What each of the four partnership states is called and coloured. */
-const RELATION: Record<UnionStatus, { label: string; badge: string; ended: boolean }> = {
-  married: { label: 'verheiratet', badge: 'badge-primary', ended: false },
-  together: { label: 'zusammen', badge: 'badge-secondary', ended: false },
-  divorced: { label: 'geschieden', badge: 'badge-error', ended: true },
-  separated: { label: 'getrennt', badge: 'badge-error', ended: true },
+/** How each of the four partnership states is coloured. */
+const RELATION: Record<UnionStatus, { badge: string; ended: boolean }> = {
+  married: { badge: 'badge-primary', ended: false },
+  together: { badge: 'badge-secondary', ended: false },
+  divorced: { badge: 'badge-error', ended: true },
+  separated: { badge: 'badge-error', ended: true },
 };
 
 function relationPill(union: Union): HTMLElement {
   const status = unionStatus(union);
-  const { label, badge, ended } = RELATION[status];
+  const { badge, ended } = RELATION[status];
+  const label = t().status[status];
   const pill = document.createElement('span');
   pill.className = `relation-pill badge badge-sm badge-soft ${badge}`;
   const from = year(unionStart(union));
@@ -178,8 +326,12 @@ function relationPill(union: Union): HTMLElement {
     pill.textContent = [from, to].filter(Boolean).join(' – ') || label;
     pill.title = `${label}${to ? ` ${to}` : ''}`;
   } else {
-    pill.textContent = from ? `seit ${from}` : label;
-    pill.title = `${label}${from ? ` seit ${from}` : ''}`;
+    // A lasting partnership also says how long it has lasted.
+    const start = parseDate(unionStart(union));
+    const lasted = start && yearsBetween(start, today());
+    const duration = lasted && lasted.years > 0 ? ` · ${t().yearsTogether(lasted.years)}` : '';
+    pill.textContent = from ? `${t().since(from)}${duration}` : label;
+    pill.title = `${label}${from ? ` ${t().since(from)}` : ''}`;
   }
   return pill;
 }
@@ -251,11 +403,15 @@ function drawWires(
 
   // A partner sits beside the card on a wide screen and below it on a phone.
   const partnerGeometry = new Map<string, { bubble: ReturnType<typeof box>; outer: ReturnType<typeof box>; below: boolean }>();
+  const wired = new Set<HTMLElement>();
   for (const [unionId, element] of partners) {
     const bubble = bubbleOf(element);
     const outer = box(element);
     const below = bubble.top > card.bottom - 4;
     partnerGeometry.set(unionId, { bubble, outer, below });
+    // One wire per partner, however often the two married.
+    if (wired.has(element)) continue;
+    wired.add(element);
 
     const status = element.dataset.status ?? 'married';
     const kind = `wire wire-${status}`;

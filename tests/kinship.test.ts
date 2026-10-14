@@ -120,3 +120,105 @@ describe('me and sex in the file', () => {
     ]);
   });
 });
+
+describe('relation in English', () => {
+  const en = (from: string, to: string) => relation(family, from, to, 'en');
+
+  it('names ancestors, descendants and siblings', () => {
+    expect(en('max', 'vater')).toBe('Father');
+    expect(en('max', 'oma')).toBe('Grandmother');
+    expect(en('max', 'uropa')).toBe('Great-grandfather');
+    expect(en('uropa', 'max')).toBe('Great-grandson');
+    expect(en('max', 'halb')).toBe('Half-sister');
+  });
+
+  it('names aunts, nieces and cousins with degree and removal', () => {
+    expect(en('max', 'tante')).toBe('Aunt');
+    expect(en('nichte', 'max')).toBe('Uncle');
+    expect(en('max', 'cousine')).toBe('Cousin');
+    expect(en('kim', 'max')).toBe('Cousin once removed');
+    expect(en('kim', 'nichte')).toBe('Second cousin');
+    expect(en('max', 'kim')).toBe('Cousin once removed');
+  });
+
+  it('names partners and in-laws', () => {
+    expect(en('max', 'frau')).toBe('Wife');
+    expect(en('max', 'neue')).toBe('Stepmother');
+    expect(en('max', 'schwaegerin')).toBe('Sister-in-law');
+    expect(en('max', 'cousinmann')).toBe("Cousin's husband");
+    expect(en('max', 'ex')).toBe("Cousin's ex-husband");
+    expect(en('max', 'robin')).toBe("Kim's partner");
+    expect(en('max', 'sv')).toBe('Father-in-law');
+    expect(en('frau', 'tante')).toBe("Husband's aunt");
+  });
+
+  it('calls the reference person "Me"', () => {
+    expect(en('max', 'max')).toBe('Me');
+    expect(en('max', 'fremd')).toBeUndefined();
+  });
+});
+
+describe('patchwork families', () => {
+  const patchwork = new Family(
+    parseFamily(`
+\`\`\`family
+person mama "Mama" sex=f
+person papa "Papa" sex=m
+person neu "Neu" sex=m
+person exfrau "Exfrau" sex=f
+person ich "Ich" sex=f
+person bruder "Bruder" sex=m
+person stief "Stief" sex=m
+mama + papa married=1985 divorced=2000 -> ich, bruder
+mama + neu married=2005
+neu + exfrau married=1990 divorced=2001 -> stief
+
+person ehemann "Ehemann" sex=m
+person schwager "Schwager" sex=m
+person schwipp "Schwipp" sex=f
+person schwiema "Schwiegermutter" sex=f
+ich + ehemann married=2015
+schwiema -> ehemann, schwager
+schwager + schwipp married=2018
+
+person bfrau "Bfrau" sex=f
+person bfs "Bfs" sex=f
+person bfmama "Bfmama" sex=f
+bruder + bfrau married=2019
+bfmama -> bfrau, bfs
+\`\`\`
+`),
+  );
+
+  it("names the children of a parent's partner step-siblings", () => {
+    expect(relation(patchwork, 'ich', 'stief')).toBe('Stiefbruder');
+    expect(relation(patchwork, 'stief', 'ich')).toBe('Stiefschwester');
+    expect(relation(patchwork, 'ich', 'stief', 'en')).toBe('Stepbrother');
+  });
+
+  it("names a partner's sibling's partner, and a sibling's partner's sibling, Schwippschwager", () => {
+    expect(relation(patchwork, 'ich', 'schwipp')).toBe('Schwippschwägerin');
+    expect(relation(patchwork, 'schwipp', 'ich')).toBe('Schwippschwägerin');
+    expect(relation(patchwork, 'ich', 'bfs')).toBe('Schwippschwägerin');
+    expect(relation(patchwork, 'ich', 'schwipp', 'en')).toBe('Sister-in-law');
+  });
+
+  it('calls someone who married their ex again a spouse, not an ex', () => {
+    const twice = new Family(
+      parseFamily('```family\nperson a "A" sex=f\nperson b "B" sex=m\na + b married=1980 divorced=1985\na + b married=1990\n```'),
+    );
+    expect(relation(twice, 'a', 'b')).toBe('Ehemann');
+  });
+});
+
+describe('a couple who married each other twice', () => {
+  const twice = new Family(
+    parseFamily(
+      '```family\nperson c "C" sex=f\nperson d "D" sex=m\na + b married=1970 divorced=1975 -> c\na + b married=1980 -> d\n```',
+    ),
+  );
+
+  it('have full siblings, not half ones, across both marriages', () => {
+    expect(relation(twice, 'c', 'd')).toBe('Bruder');
+  });
+});

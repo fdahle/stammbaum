@@ -6,8 +6,9 @@
   "description": "Stammbaum — a pocket who-is-who for family gatherings",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --ssr server/main.ts --outDir dist-server",
     "build:single": "tsc --noEmit && vite build --mode single",
+    "start": "node dist-server/main.js",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -22,5 +23,8 @@
     "vite": "^5.4.10",
     "vite-plugin-singlefile": "^2.0.3",
     "vitest": "^2.1.4"
+  },
+  "dependencies": {
+    "country-flag-emoji-polyfill": "^0.1.8"
   }
 }

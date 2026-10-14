@@ -1,0 +1,21 @@
+# The parts of Authelia's configuration.yml this site needs — merge them into the
+# existing file rather than replacing it. The domain has to sit under one of the
+# session cookie domains, or the login does not stick.
+
+access_control:
+  default_policy: deny
+  rules:
+    # Only the family, and nobody else with an account on the server.
+    - domain: stammbaum.example.com
+      policy: two_factor # one_factor is kinder to relatives at a party
+      subject: 'group:family'
+
+# Each relative is a user in the `family` group, e.g. in users_database.yml
+# (hash with `authelia crypto hash generate argon2`):
+#
+# users:
+#   oma:
+#     displayname: "Oma"
+#     password: "$argon2id$..."
+#     email: oma@example.com
+#     groups: [family]

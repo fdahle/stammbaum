@@ -14,7 +14,9 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    // Vite picks the live or the bundled family per build; type-check against the live one.
+    "paths": { "@source": ["./src/source/live.ts"] }
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "server", "tests", "vite.config.ts"]
 }

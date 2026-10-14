@@ -1,9 +1,10 @@
 import type { Family } from '../family';
 import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from '../layout/layout';
-import { photoUrl } from '../data';
-import { familyName, initials, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
+import { familyStamp, photoUrl } from '../data';
+import { familyName, initials, isStandIn, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
 import { icon, weddingRings, RINGS } from '../ui/icons';
-import { unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
+import { isDeceased, unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
+import { t } from '../i18n';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MIN_SCALE = 0.12;
@@ -12,6 +13,8 @@ const MAX_SCALE = 2.5;
 const READABLE_SCALE = 0.5;
 const DOUBLE_TAP_MS = 320;
 const TAP_SLOP = 10;
+/** How long a finger rests on the tree before that counts as a right-click. */
+const LONG_PRESS_MS = 500;
 /** Room under the lowest row for the build stamp. */
 const STAMP_SPACE = 32;
 
@@ -20,6 +23,12 @@ interface View {
   x: number;
   y: number;
 }
+
+/** What a right-click or a long press on the tree was on. */
+export type TreeTarget = { kind: 'person'; id: string } | { kind: 'union'; id: string } | { kind: 'canvas' };
+
+/** Asks for the menu of `target`, at a point in the window. */
+export type ContextHandler = (target: TreeTarget, at: { x: number; y: number }) => void;
 
 /**
  * The whole tree in one SVG, driven entirely by gestures: drag to pan, pinch to
@@ -34,15 +43,20 @@ export class OverviewView {
   /** The tree plus the build stamp beneath it. */
   private readonly height: number;
   private readonly nodeElements = new Map<string, SVGGElement>();
+  private readonly fab: HTMLButtonElement;
+  private readonly stamp: SVGTextElement;
   private view: View = { k: 1, x: 0, y: 0 };
   private positioned = false;
   private highlighted: string | undefined;
+  /** Who the opening view centres on when the tree does not fit. */
+  private focus: string | undefined;
   private animation = 0;
   private momentum = 0;
 
   constructor(
     private readonly family: Family,
     private readonly onSelect: (id: string) => void,
+    private readonly onContext?: ContextHandler,
   ) {
     this.layout = layoutFamily(family.graph);
     this.height = this.layout.height + STAMP_SPACE;
@@ -55,15 +69,79 @@ export class OverviewView {
     this.svg.append(this.viewport);
     this.element.append(this.svg);
 
-    this.viewport.append(this.drawLinks(), this.drawNodes(), this.drawStamp());
+    this.stamp = this.drawStamp();
+    this.viewport.append(this.drawLinks(), this.drawNodes(), this.stamp);
     this.bindGestures();
-    this.element.append(this.buildFab());
+    this.fab = this.buildFab();
+    this.element.append(this.fab);
+    this.localize();
   }
 
-  /** Called whenever the view becomes visible. */
-  activate(): void {
+  /** Puts the app's own words into the current language. */
+  localize(): void {
+    this.fab.title = t().fit;
+    this.fab.setAttribute('aria-label', t().fit);
+    this.stamp.textContent = buildStamp(__BUILD_TIME__, familyStamp());
+  }
+
+  /** Rings whoever is looking at the tree. */
+  markViewer(id: string | undefined): void {
+    for (const [nodeId, element] of this.nodeElements) element.classList.toggle('is-me', nodeId === id);
+  }
+
+  /**
+   * Fades everyone but `ids` and brings them into view — a path between two
+   * people, say. `undefined` shows the whole tree evenly again.
+   */
+  emphasize(ids: string[] | undefined): void {
+    const keep = new Set(ids ?? []);
+    this.svg.classList.toggle('has-emphasis', keep.size > 0);
+    for (const [id, element] of this.nodeElements) element.classList.toggle('is-emphasized', keep.has(id));
+    if (keep.size > 0) this.fitTo([...keep]);
+  }
+
+  /** Zooms to the smallest view that shows all of `ids`. */
+  private fitTo(ids: string[]): void {
+    const nodes = ids.map((id) => this.layout.nodes.get(id)).filter((n): n is NodeBox => !!n);
+    const box = this.svg.getBoundingClientRect();
+    if (nodes.length === 0 || box.width === 0) return;
+    const half = METRICS.nodeWidth / 2;
+    const left = Math.min(...nodes.map((n) => n.x)) - half;
+    const right = Math.max(...nodes.map((n) => n.x)) + half;
+    const top = Math.min(...nodes.map((n) => n.y)) - METRICS.bubbleRadius - 12;
+    const bottom = Math.max(...nodes.map((n) => n.y)) + METRICS.bubbleRadius + 60;
+    const k = clamp(Math.min(box.width / (right - left + 32), box.height / (bottom - top + 32)), MIN_SCALE, 1.1);
+    this.positioned = true;
+    this.animateTo({
+      k,
+      x: box.width / 2 - ((left + right) / 2) * k,
+      y: box.height / 2 - ((top + bottom) / 2) * k,
+    });
+  }
+
+  /**
+   * Called whenever the view becomes visible. The first time, a tree too big
+   * for the screen opens on `focus` — whoever is looking, say — rather than on
+   * whatever happens to be in the middle.
+   */
+  activate(focus?: string): void {
+    this.focus = focus;
     if (this.positioned) this.apply();
     else this.frame();
+  }
+
+  /**
+   * Takes over where `other` was looking — for the same family after a
+   * change, so an edit does not throw the view back to the start.
+   */
+  keepViewOf(other: OverviewView): void {
+    this.view = { ...other.view };
+    this.positioned = other.positioned;
+  }
+
+  /** Forgets where the view was left, so the next `activate` opens afresh. */
+  reframe(): void {
+    this.positioned = false;
   }
 
   /** The opening view: readable rather than complete, which matters on a phone. */
@@ -75,10 +153,13 @@ export class OverviewView {
       READABLE_SCALE,
       1,
     );
+    const node = this.focus === undefined ? undefined : this.layout.nodes.get(this.focus);
+    const fitsAcross = this.layout.width * k <= box.width;
+    const fitsDown = this.height * k <= box.height;
     this.set({
       k,
-      x: (box.width - this.layout.width * k) / 2,
-      y: Math.min((box.height - this.height * k) / 2, 24),
+      x: node && !fitsAcross ? box.width / 2 - node.x * k : (box.width - this.layout.width * k) / 2,
+      y: node && !fitsDown ? box.height * 0.42 - node.y * k : Math.min((box.height - this.height * k) / 2, 24),
     });
     this.positioned = true;
   }
@@ -102,6 +183,11 @@ export class OverviewView {
     else this.set(target);
   }
 
+  /** Whether this tree shows `id` at all — an ancestor tree leaves most people out. */
+  has(id: string): boolean {
+    return this.layout.nodes.has(id);
+  }
+
   /** Centres one bubble and marks it, used by search. */
   highlight(id: string): void {
     const node = this.layout.nodes.get(id);
@@ -111,9 +197,15 @@ export class OverviewView {
     this.positioned = true;
     this.animateTo({ k, x: box.width / 2 - node.x * k, y: box.height / 2 - node.y * k });
 
-    if (this.highlighted) this.nodeElements.get(this.highlighted)?.classList.remove('is-focused');
+    this.unhighlight();
     this.nodeElements.get(id)?.classList.add('is-focused');
     this.highlighted = id;
+  }
+
+  /** Takes the search ring off again, once the search is no longer what is on screen. */
+  unhighlight(): void {
+    if (this.highlighted) this.nodeElements.get(this.highlighted)?.classList.remove('is-focused');
+    this.highlighted = undefined;
   }
 
   // ---- viewport -----------------------------------------------------------
@@ -195,6 +287,12 @@ export class OverviewView {
     let velocity = { x: 0, y: 0 };
     let lastMove = 0;
     let lastTap = { t: 0, x: 0, y: 0 };
+    let longPress = 0;
+    /** A long press opened the menu: letting go is not a tap. */
+    let held = false;
+    /** Touch brings its own long press; the browser's contextmenu for it is ignored. */
+    let lastPointer = '';
+    let keyboardMenu = 0;
 
     const local = (event: { clientX: number; clientY: number }) => {
       const box = this.svg.getBoundingClientRect();
@@ -202,6 +300,9 @@ export class OverviewView {
     };
 
     this.svg.addEventListener('pointerdown', (event) => {
+      lastPointer = event.pointerType;
+      // The right button is for the menu, not for panning or picking.
+      if (event.button !== 0) return;
       this.stopMomentum();
       cancelAnimationFrame(this.animation);
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -221,6 +322,18 @@ export class OverviewView {
       // Pointer capture retargets later events at the <svg>, so remember now
       // what was actually pressed.
       pressed = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+
+      held = false;
+      clearTimeout(longPress);
+      if (event.pointerType !== 'mouse' && pointers.size === 1 && this.onContext) {
+        const at = { x: event.clientX, y: event.clientY };
+        longPress = window.setTimeout(() => {
+          if (travelled >= TAP_SLOP || pointers.size !== 1) return;
+          held = true;
+          navigator.vibrate?.(10);
+          this.openContext(at.x, at.y);
+        }, LONG_PRESS_MS);
+      }
     });
 
     this.svg.addEventListener('pointermove', (event) => {
@@ -241,12 +354,14 @@ export class OverviewView {
         pinch = next;
         centre = nextCentre;
         travelled = Infinity;
+        clearTimeout(longPress);
         return;
       }
 
       const dx = event.clientX - previous.x;
       const dy = event.clientY - previous.y;
       travelled += Math.hypot(dx, dy);
+      if (travelled >= TAP_SLOP) clearTimeout(longPress);
       const dt = Math.max(event.timeStamp - lastMove, 1);
       lastMove = event.timeStamp;
       velocity = { x: mix(velocity.x, dx / dt, 0.35), y: mix(velocity.y, dy / dt, 0.35) };
@@ -255,10 +370,16 @@ export class OverviewView {
     });
 
     const release = (event: PointerEvent) => {
-      pointers.delete(event.pointerId);
+      if (!pointers.delete(event.pointerId)) return;
+      clearTimeout(longPress);
       if (pointers.size < 2) pinch = 0;
       if (pointers.size > 0) return;
       this.element.classList.remove('is-panning');
+      if (held) {
+        held = false;
+        pressed = undefined;
+        return;
+      }
 
       if (travelled < TAP_SLOP) {
         if (pressed) {
@@ -295,14 +416,29 @@ export class OverviewView {
       { passive: false },
     );
 
-    // Long-press on a bubble should not raise the browser's own menu.
-    this.svg.addEventListener('contextmenu', (event) => event.preventDefault());
+    // The tree's own menu instead of the browser's.
+    this.svg.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      if (!this.onContext || performance.now() - keyboardMenu < 500) return;
+      if (lastPointer === 'touch' || lastPointer === 'pen') return;
+      this.openContext(event.clientX, event.clientY);
+    });
 
     this.svg.addEventListener('keydown', (event) => {
-      const id = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+      lastPointer = '';
+      const node = (event.target as Element | null)?.closest<SVGGElement>('.node');
+      const id = node?.dataset.id;
       if (id && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault();
         this.onSelect(id);
+        return;
+      }
+      if (this.onContext && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+        event.preventDefault();
+        keyboardMenu = performance.now();
+        const box = (node ?? this.svg).getBoundingClientRect();
+        const at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        this.onContext(id ? { kind: 'person', id } : { kind: 'canvas' }, at);
         return;
       }
       const pan: Record<string, [number, number]> = {
@@ -322,6 +458,15 @@ export class OverviewView {
         this.zoomAround(event.key === '+' ? 1.3 : 1 / 1.3, box.width / 2, box.height / 2);
       }
     });
+  }
+
+  /** The menu for whatever is under a point in the window: a person, a line between people, or nothing. */
+  private openContext(x: number, y: number): void {
+    const hit = document.elementFromPoint(x, y);
+    const id = hit?.closest<SVGGElement>('.node')?.dataset.id;
+    const union = hit?.closest<SVGElement>('[data-union]')?.dataset.union;
+    const target: TreeTarget = id ? { kind: 'person', id } : union ? { kind: 'union', id: union } : { kind: 'canvas' };
+    this.onContext?.(target, { x, y });
   }
 
   private doubleTap(x: number, y: number): void {
@@ -360,14 +505,109 @@ export class OverviewView {
     this.momentum = requestAnimationFrame(step);
   }
 
+  // ---- export -------------------------------------------------------------
+
+  /**
+   * The whole tree as a picture of its own, `title` on top — for a poster, or
+   * to send around. The stylesheet does not travel with the file, so every
+   * element takes its computed look along inline, colours resolved to plain
+   * sRGB and photos embedded.
+   */
+  async exportImage(format: 'svg' | 'png', title: string): Promise<Blob> {
+    // Computed styles need the tree in the document, if only off screen.
+    const detached = !this.element.isConnected;
+    if (detached) {
+      this.element.style.cssText = 'position: fixed; left: -10000px; top: 0; width: 800px; height: 600px';
+      document.body.append(this.element);
+    }
+    try {
+      const svg = await this.standaloneSvg(title);
+      const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' });
+      return format === 'svg' ? blob : await rasterize(blob, this.layout.width, this.height + TITLE_SPACE);
+    } finally {
+      if (detached) {
+        this.element.remove();
+        this.element.style.cssText = '';
+      }
+    }
+  }
+
+  private async standaloneSvg(title: string): Promise<SVGSVGElement> {
+    // Always light: a dark poster prints badly. The styles are read in one
+    // synchronous go, so the page never paints in the borrowed theme.
+    const root = document.documentElement;
+    const theme = root.dataset.theme;
+    // Without transitions, so the computed colours are the final ones at once.
+    this.svg.classList.add('is-exporting');
+    root.dataset.theme = 'light';
+    // A picture for the whole family: no ring for whoever happens to be looking.
+    const personal = [...this.svg.querySelectorAll('.is-me, .is-focused')];
+    const marks = personal.map((element) => [...element.classList].filter((c) => c === 'is-me' || c === 'is-focused'));
+    personal.forEach((element, i) => element.classList.remove(...marks[i]!));
+
+    const clone = this.svg.cloneNode(true) as SVGSVGElement;
+    const originals = [this.svg, ...this.svg.querySelectorAll('*')];
+    const copies = [clone, ...clone.querySelectorAll('*')];
+    originals.forEach((original, i) => {
+      const copy = copies[i]!;
+      const style = getComputedStyle(original);
+      const inline = EXPORTED_STYLES.map((property) => {
+        const value = style.getPropertyValue(property);
+        return value ? `${property}: ${property === 'fill' || property === 'stroke' ? solidColor(value) : value}` : '';
+      });
+      copy.setAttribute('style', inline.filter(Boolean).join('; '));
+      for (const attribute of ['class', 'tabindex', 'role']) copy.removeAttribute(attribute);
+    });
+    for (const hit of clone.querySelectorAll('[data-union]')) hit.remove();
+    // The title gets a band of its own above the tree.
+    const width = this.layout.width;
+    const height = this.height + TITLE_SPACE;
+    clone.setAttribute('xmlns', SVG_NS);
+    clone.setAttribute('width', String(width));
+    clone.setAttribute('height', String(height));
+    clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    clone.querySelector(':scope > g')?.setAttribute('transform', `translate(0 ${TITLE_SPACE})`);
+
+    const shell = getComputedStyle(document.querySelector('.app-shell') ?? document.body);
+    const background = svgEl('rect', { width, height, fill: solidColor(shell.backgroundColor) });
+    const heading = svgEl('text', {
+      x: width / 2,
+      y: 64,
+      'text-anchor': 'middle',
+      'font-size': 28,
+      'font-weight': 600,
+      'font-family': shell.fontFamily,
+      fill: solidColor(shell.color),
+    });
+    heading.textContent = title;
+    clone.prepend(background, heading);
+
+    personal.forEach((element, i) => element.classList.add(...marks[i]!));
+    if (theme === undefined) delete root.dataset.theme;
+    else root.dataset.theme = theme;
+    this.svg.classList.remove('is-exporting');
+
+    // A file opened on its own cannot reach the app's photo URLs.
+    await Promise.all(
+      [...clone.querySelectorAll('image')].map(async (image) => {
+        const href = image.getAttribute('href');
+        if (!href || href.startsWith('data:')) return;
+        try {
+          image.setAttribute('href', await dataUrl(await (await fetch(href)).blob()));
+        } catch {
+          image.remove();
+        }
+      }),
+    );
+    return clone;
+  }
+
   // ---- drawing ------------------------------------------------------------
 
-  private buildFab(): HTMLElement {
+  private buildFab(): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'fab-fit btn btn-primary btn-circle btn-lg shadow-lg';
-    button.title = 'Ganzen Stammbaum zeigen';
-    button.setAttribute('aria-label', 'Ganzen Stammbaum zeigen');
     button.append(icon('fit'));
     button.addEventListener('click', () => this.fit());
     return button;
@@ -380,13 +620,28 @@ export class OverviewView {
       x: this.layout.width / 2,
       y: this.layout.height + STAMP_SPACE - 10,
     });
-    text.textContent = buildStamp(__BUILD_TIME__, __FAMILY_COMMIT__);
     return text;
   }
 
   private drawLinks(): SVGGElement {
     const group = svgEl('g', { class: 'links' });
+    // Wide, invisible copies of the lines on top, so a line is easy to hit
+    // with a right-click or a finger; each knows its partnership.
+    const hits = svgEl('g', { class: 'link-hits' });
+    const hit = (union: UnionEdge, element: SVGElement) => {
+      const copy = element.cloneNode() as SVGElement;
+      copy.setAttribute('class', 'link-hit');
+      copy.dataset.union = union.id;
+      hits.append(copy);
+    };
     const lanes = assignLanes(this.layout);
+    // A couple who married twice share one line, drawn for the latest marriage
+    // and labelled with both.
+    const couples = new Map<string, UnionEdge[]>();
+    for (const union of this.layout.unions) {
+      const key = [...union.partners].sort().join('+');
+      couples.set(key, [...(couples.get(key) ?? []), union]);
+    }
 
     for (const union of this.layout.unions) {
       const partners = union.partners
@@ -394,11 +649,13 @@ export class OverviewView {
         .filter((n): n is NodeBox => !!n)
         .sort((a, b) => a.x - b.x);
 
-      const state = unionStatus(union);
+      const couple = couples.get([...union.partners].sort().join('+'))!;
+      const latest = couple[couple.length - 1]!;
+      const state = unionStatus(latest);
       const [left, right] = partners;
       // Only a real couple gets the rings; a lone parent has no line to hang on.
       const rings = state === 'married' && !!left && !!right;
-      if (left && right) {
+      if (left && right && union === latest) {
         const cls = `link link-${state}`;
         const x1 = left.x + METRICS.bubbleRadius;
         const x2 = right.x - METRICS.bubbleRadius;
@@ -411,7 +668,8 @@ export class OverviewView {
         } else {
           group.append(svgEl('line', { class: cls, x1, y1: left.y, x2, y2: right.y }));
         }
-        const label = unionLabel(union);
+        hit(union, svgEl('line', { x1, y1: left.y, x2, y2: right.y }));
+        const label = couple.map(unionLabel).filter(Boolean).join(' · ');
         if (label) {
           const text = svgEl('text', {
             class: 'union-label',
@@ -430,21 +688,22 @@ export class OverviewView {
 
       const busY = union.y + METRICS.rowHeight - 92 + (lanes.get(union.id) ?? 0) * 15;
       const xs = children.map((c) => c.x);
-      group.append(
-        svgEl('path', {
-          class: 'link link-descent',
-          d: [
-            // The children hang off the rings when there are any, off the
-            // partner line otherwise.
-            `M ${union.x} ${union.y + (rings ? RINGS.radius : partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
-            `L ${union.x} ${busY}`,
-            `M ${Math.min(...xs, union.x)} ${busY}`,
-            `L ${Math.max(...xs, union.x)} ${busY}`,
-            ...children.map((c) => `M ${c.x} ${busY} L ${c.x} ${c.y - METRICS.bubbleRadius - 4}`),
-          ].join(' '),
-        }),
-      );
+      const descent = svgEl('path', {
+        class: 'link link-descent',
+        d: [
+          // The children hang off the rings when there are any, off the
+          // partner line otherwise.
+          `M ${union.x} ${union.y + (rings ? RINGS.radius : partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
+          `L ${union.x} ${busY}`,
+          `M ${Math.min(...xs, union.x)} ${busY}`,
+          `L ${Math.max(...xs, union.x)} ${busY}`,
+          ...children.map((c) => `M ${c.x} ${busY} L ${c.x} ${c.y - METRICS.bubbleRadius - 4}`),
+        ].join(' '),
+      });
+      group.append(descent);
+      hit(union, descent);
     }
+    group.append(hits);
     return group;
   }
 
@@ -463,7 +722,7 @@ export class OverviewView {
   private drawNode(person: Person, node: NodeBox): SVGGElement {
     const r = METRICS.bubbleRadius;
     const group = svgEl('g', {
-      class: `node${person.died ? ' is-deceased' : ''}`,
+      class: `node${isDeceased(person) ? ' is-deceased' : ''}${isStandIn(person) ? ' is-stand-in' : ''}`,
       transform: `translate(${node.x} ${node.y})`,
       tabindex: 0,
       role: 'button',
@@ -556,6 +815,82 @@ function assignLanes(layout: Layout): Map<string, number> {
     lanes.set(span.union.id, lane);
   }
   return lanes;
+}
+
+/** Everything the tree's stylesheet decides that an exported picture needs to keep. */
+const EXPORTED_STYLES = [
+  'fill',
+  'fill-opacity',
+  'stroke',
+  'stroke-width',
+  'stroke-dasharray',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-opacity',
+  'paint-order',
+  'opacity',
+  'filter',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'font-variant-numeric',
+  'text-anchor',
+];
+
+/** Room above an exported tree for its title. */
+const TITLE_SPACE = 56;
+
+/** A browser-safe pixel budget: iOS refuses canvases much larger than 16 megapixels. */
+const MAX_PIXELS = 16_000_000;
+
+let swatch: CanvasRenderingContext2D | null | undefined;
+
+/**
+ * The theme's colours are oklab mixes, which other SVG viewers do not read.
+ * Painting one pixel and reading it back gives plain sRGB with alpha.
+ */
+function solidColor(value: string): string {
+  if (!value || value === 'none' || value.startsWith('url(')) return value;
+  swatch ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  if (!swatch) return value;
+  const sentinel = '#010203';
+  swatch.fillStyle = sentinel;
+  swatch.fillStyle = value;
+  // Left unchanged: the canvas could not parse it either, so keep it as is.
+  if (swatch.fillStyle === sentinel) return value;
+  swatch.clearRect(0, 0, 1, 1);
+  swatch.fillRect(0, 0, 1, 1);
+  const [r = 0, g = 0, b = 0, a = 255] = swatch.getImageData(0, 0, 1, 1).data;
+  return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+}
+
+function dataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Draws an SVG into a PNG, twice as sharp as on screen where the budget allows. */
+async function rasterize(svg: Blob, width: number, height: number): Promise<Blob> {
+  const url = URL.createObjectURL(svg);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const scale = Math.min(2, Math.sqrt(MAX_PIXELS / (width * height)));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve, reject) =>
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('canvas is empty'))), 'image/png'),
+    );
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 type Point = { x: number; y: number };

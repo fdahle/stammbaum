@@ -22,6 +22,17 @@ describe('Family', () => {
     ]);
   });
 
+  it('lists brothers and sisters, full ones first, half ones marked', () => {
+    expect(family.siblings('nina').map((s) => [s.person.id, s.half])).toEqual([
+      ['jonas', false],
+      ['luca', true],
+    ]);
+    expect(family.siblings('luca').map((s) => [s.person.id, s.half])).toEqual([
+      ['nina', true],
+      ['jonas', true],
+    ]);
+  });
+
   it('leaves childless partnerships out of the broods', () => {
     expect(family.broods('elisabeth').every((b) => b.children.length > 0)).toBe(true);
   });
@@ -47,5 +58,108 @@ describe('Family', () => {
 
   it('returns nothing for a blank query', () => {
     expect(family.search('   ')).toEqual([]);
+  });
+
+  it('finds people by place, job and year of birth', () => {
+    expect(family.search('lissabon')[0]?.id).toBe('jonas');
+    expect(family.search('schreiner')[0]?.id).toBe('heinrich');
+    expect(family.search('1989')[0]?.id).toBe('jonas');
+  });
+
+  it('needs every word of the query to match', () => {
+    expect(family.search('bauer lindau').map((p) => p.id).sort()).toEqual(['elisabeth', 'heinrich', 'klaus']);
+    expect(family.search('klaus lissabon')).toEqual([]);
+  });
+
+  it('searches extra words, such as what someone is to the viewer', () => {
+    const extra = (p: { id: string }) => [p.id === 'brigitte' ? 'Tante' : undefined];
+    expect(family.search('tante', { extra }).map((p) => p.id)).toEqual(['brigitte']);
+  });
+});
+
+describe('adoption', () => {
+  it('makes adopted children children, and marks them', () => {
+    expect(family.parents('marie').map((p) => p.id)).toEqual(['thomas', 'petra']);
+    expect(family.adopted('marie')).toBe(true);
+    expect(family.adopted('nina')).toBe(false);
+  });
+});
+
+describe('paths', () => {
+  it('goes through the common ancestors between blood relatives', () => {
+    expect(family.path('jonas', 'felix')).toEqual(['jonas', 'klaus', 'heinrich', 'brigitte', 'felix']);
+  });
+
+  it('crosses a partnership to reach in-laws', () => {
+    expect(family.path('emil', 'ayla')).toEqual(['emil', 'ayla']);
+    expect(family.path('tim', 'jonas')).toEqual(['tim', 'nina', 'klaus', 'jonas']);
+  });
+
+  it('is the person alone for a path to themselves, and nothing for strangers', () => {
+    expect(family.path('mia', 'mia')).toEqual(['mia']);
+    expect(family.path('mia', 'nobody')).toBeUndefined();
+  });
+});
+
+describe('subtrees', () => {
+  it('keeps only the ancestors, and the partnerships between them', () => {
+    const graph = family.ancestorsGraph('nina');
+    expect([...graph.people.keys()].sort()).toEqual(['elisabeth', 'heinrich', 'ingrid', 'klaus', 'nina', 'sabine', 'werner']);
+    expect(graph.unions.map((u) => [u.partners, u.children])).toEqual([
+      [['heinrich', 'elisabeth'], ['klaus']],
+      [['werner', 'ingrid'], ['sabine']],
+      [['klaus', 'sabine'], ['nina']],
+    ]);
+  });
+
+  it("keeps the descendants and their partners, but not the partners' other families", () => {
+    const graph = family.descendantsGraph('klaus');
+    expect([...graph.people.keys()].sort()).toEqual(['ben', 'carmen', 'jonas', 'klaus', 'luca', 'mia', 'nina', 'sabine', 'tim']);
+    expect(new Family(graph).children('klaus').map((p) => p.id)).toEqual(['nina', 'jonas', 'luca']);
+  });
+});
+
+describe('German spellings', () => {
+  const people = new Family(
+    parseFamily('```family\nperson m "Jürgen Müller" lives="Bad Wörishofen"\nperson s "Anna Strauß"\n```'),
+  );
+
+  it('finds umlauts typed as they are, without the dots, or spelled out', () => {
+    for (const query of ['müller', 'muller', 'mueller', 'MUELLER', 'woerishofen', 'jurgen', 'juergen']) {
+      expect(people.search(query).map((p) => p.id)).toEqual(['m']);
+    }
+  });
+
+  it('finds ß as ss', () => {
+    for (const query of ['strauß', 'strauss']) {
+      expect(people.search(query).map((p) => p.id)).toEqual(['s']);
+    }
+  });
+});
+
+describe('a couple who married each other twice', () => {
+  it('have their children in one group', () => {
+    const twice = new Family(parseFamily('```family\na + b married=1970 divorced=1975 -> c\na + b married=1980 -> d\n```'));
+    expect(twice.broods('a').map((b) => [b.union.id, b.children.map((c) => c.id)])).toEqual([['a+b~2', ['c', 'd']]]);
+  });
+});
+
+describe('only my family', () => {
+  it('keeps blood relatives and their partners, not the partners’ families', () => {
+    const family = new Family(
+      parseFamily(`\`\`\`family
+oma + opa -> christian, heiko
+erna + hermann -> birgit, detlef
+birgit + christian -> felix, carolina
+elke + unger -> anja, trini
+felix + anja -> leon
+heiko + tanja -> cousin
+\`\`\``),
+    );
+    const kin = new Family(family.kinGraph('felix'));
+    const ids = kin.people().map((p) => p.id).sort();
+    expect(ids).toEqual(['anja', 'birgit', 'carolina', 'christian', 'cousin', 'detlef', 'erna', 'felix', 'heiko', 'hermann', 'leon', 'oma', 'opa', 'tanja']);
+    expect(kin.parents('anja')).toEqual([]);
+    expect(kin.children('felix').map((p) => p.id)).toEqual(['leon']);
   });
 });

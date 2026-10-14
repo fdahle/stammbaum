@@ -15,6 +15,11 @@
   themes: light --default, dark --prefersdark;
 }
 
+/* Flags first: that font has nothing else, so all other text falls through. */
+@theme {
+  --font-sans: 'Twemoji Country Flags', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
 /* Rounder than the daisyUI defaults, closer to how current mobile UIs look. */
 :root,
 [data-theme='light'],
@@ -76,6 +81,19 @@
 
   .overview.is-panning .tree {
     cursor: grabbing;
+  }
+
+  /* A long press opens the tree's own menu, not the phone's. */
+  .tree {
+    -webkit-touch-callout: none;
+  }
+
+  /* Wide and invisible over each line, so a right-click or a finger finds it. */
+  .link-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 16px;
+    pointer-events: stroke;
   }
 
   .link {
@@ -192,6 +210,84 @@
 
   .node:focus-visible {
     outline: none;
+  }
+
+  /* A parent nobody has named yet: an outline to fill in, not a person. */
+  .node.is-stand-in .bubble-ring,
+  .node.is-stand-in:hover .bubble-ring,
+  .node.is-stand-in:focus-visible .bubble-ring {
+    fill: none;
+    stroke: color-mix(in oklab, var(--color-base-content) 35%, transparent);
+    stroke-width: 2px;
+    stroke-dasharray: 5 4;
+  }
+
+  .node.is-stand-in:hover .bubble-ring,
+  .node.is-stand-in:focus-visible .bubble-ring {
+    stroke: var(--color-primary);
+  }
+
+  .node.is-stand-in .bubble-fill {
+    fill: var(--color-base-200);
+  }
+
+  /* Whoever is looking finds themselves at a glance. */
+  .node.is-me .bubble-ring {
+    fill: var(--color-secondary);
+  }
+
+  /* A path or a search result: everything else steps back. */
+  .tree.has-emphasis .node:not(.is-emphasized),
+  .tree.has-emphasis .links {
+    opacity: 0.28;
+    transition: opacity 0.2s ease;
+  }
+
+  .tree.has-emphasis .node.is-emphasized .bubble-ring {
+    fill: var(--color-primary);
+  }
+
+  /* Saving a picture reads the colours straight away; nothing may be mid-fade. */
+  .tree.is-exporting * {
+    transition: none !important;
+  }
+
+  .tree-chip {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    z-index: 3;
+    max-width: calc(100% - 32px);
+    height: auto;
+    min-height: 2.25rem;
+    gap: 6px;
+    padding-inline: 14px 6px;
+    transform: translateX(-50%);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .tree-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tree-chip-close {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    color: inherit;
+  }
+
+  .tree-chip-close:hover {
+    background: var(--color-base-200);
+  }
+
+  .tree-chip-close .icon {
+    width: 1.1rem;
+    height: 1.1rem;
   }
 
   /* ---- person view ------------------------------------------------------ */
@@ -436,6 +532,27 @@
     color: var(--color-primary);
   }
 
+  .focus-card {
+    position: relative;
+  }
+
+  .focus-edit {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .focus-edit:hover,
+  .focus-edit:focus-visible {
+    color: var(--color-primary);
+  }
+
+  .focus-edit .icon {
+    width: 18px;
+    height: 18px;
+  }
+
   .focus-nick,
   .focus-maiden {
     margin: 0;
@@ -455,6 +572,606 @@
     font-size: 0.875rem;
     color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
     border-top: 1px solid var(--color-base-300);
+  }
+
+  .focus-job,
+  .focus-lives,
+  .focus-adopted,
+  .focus-age {
+    margin: 0;
+    font-size: 0.875rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .focus-job {
+    font-style: italic;
+  }
+
+  .focus-age {
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .focus-birthday {
+    margin: 6px 0 0;
+  }
+
+  .focus-card .bubble-html.is-zoomable {
+    cursor: zoom-in;
+  }
+
+  .focus-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .gallery-thumb {
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--radius-field);
+    background: var(--color-base-200);
+    cursor: zoom-in;
+  }
+
+  .gallery-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .focus-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 16px;
+  }
+
+  .focus-actions .icon {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  /* ---- relation view ---------------------------------------------------- */
+
+  .relation-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 20px 12px calc(40px + env(safe-area-inset-bottom));
+  }
+
+  .relation-pair {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .relation-end {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .relation-terms {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    max-width: 380px;
+    padding: 18px 20px;
+    text-align: center;
+  }
+
+  .relation-line {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .relation-term {
+    margin: 0 0 10px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .relation-term:last-child {
+    margin-bottom: 0;
+  }
+
+  .relation-term.is-missing {
+    font-size: 0.9375rem;
+    font-weight: 400;
+    font-style: italic;
+    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+  }
+
+  .relation-note,
+  .relation-hint {
+    margin: 0;
+    max-width: 40ch;
+    text-align: center;
+    font-size: 0.875rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .relation-hint {
+    font-size: 0.75rem;
+  }
+
+  .relation-path-section {
+    width: 100%;
+  }
+
+  .relation-path-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .relation-path-toggle {
+    display: flex;
+    width: fit-content;
+    margin: 0 auto;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-field);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .relation-path-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .relation-path-toggle:hover,
+  .relation-path-toggle:focus-visible {
+    background: var(--color-base-200);
+    outline: none;
+  }
+
+  .relation-path-toggle .tier-label {
+    margin: 0;
+  }
+
+  .relation-path-chevron {
+    width: 16px;
+    height: 16px;
+    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+    transition: transform 0.15s ease;
+  }
+
+  .relation-path-section[open] .relation-path-chevron {
+    transform: rotate(90deg);
+  }
+
+  .relation-path-steps {
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+  }
+
+  .relation-path {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 4px 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .relation-path li {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .relation-arrow {
+    /* Level with the middle of the bubble next to it: tile padding + half a bubble − half an icon. */
+    margin-top: 32px;
+    color: color-mix(in oklab, var(--color-base-content) 35%, transparent);
+  }
+
+  /* ---- list pages: birthdays, numbers, what is missing ------------------ */
+
+  .page-view {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 20px 12px calc(40px + env(safe-area-inset-bottom));
+  }
+
+  .page-title {
+    margin: 0;
+    font-size: 1.375rem;
+    font-weight: 600;
+  }
+
+  .page-hint {
+    margin: 0 0 8px;
+    font-size: 0.875rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  /* ---- family.md as it is ------------------------------------------------ */
+
+  .source-view {
+    max-width: 960px;
+  }
+
+  .source-code {
+    margin: 8px 0 0;
+    padding: 12px 0;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    counter-reset: line;
+    tab-size: 4;
+  }
+
+  .source-line {
+    display: block;
+    padding-right: 16px;
+    white-space: pre;
+  }
+
+  /* Numbered like the warnings count them. */
+  .source-line::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 3.5em;
+    margin-right: 12px;
+    padding-right: 8px;
+    text-align: right;
+    color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    user-select: none;
+  }
+
+  /* ---- the tree before anyone is in it ----------------------------------- */
+
+  .empty-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 18vh 16px 40px;
+    text-align: center;
+  }
+
+  .empty-view > .icon {
+    width: 56px;
+    height: 56px;
+    color: var(--color-primary);
+  }
+
+  .empty-view .btn {
+    margin-top: 8px;
+  }
+
+  /* ---- choosing the circle of a portrait ---------------------------------- */
+
+  .crop-stage {
+    position: relative;
+    width: min(100%, 360px);
+    aspect-ratio: 1;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: var(--radius-box);
+    background: var(--color-base-300);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .crop-stage:active {
+    cursor: grabbing;
+  }
+
+  .crop-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    max-width: none;
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+
+  /* Everything outside the circle dimmed, the circle itself outlined. */
+  .crop-ring {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle closest-side, transparent 99%, rgb(0 0 0 / 0.55) 100%);
+    pointer-events: none;
+  }
+
+  .crop-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgb(255 255 255 / 0.9);
+    border-radius: 50%;
+  }
+
+  /* ---- right-click menu on the tree --------------------------------------- */
+
+  .context-menu {
+    position: fixed;
+    z-index: 70;
+    min-width: 200px;
+    max-width: calc(100vw - 16px);
+    padding: 6px;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    box-shadow: 0 8px 28px rgb(0 0 0 / 0.18), 0 1px 3px rgb(0 0 0 / 0.12);
+  }
+
+  .context-menu-title {
+    margin: 0;
+    padding: 6px 10px 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .context-menu .menu button {
+    gap: 10px;
+    font-size: 0.875rem;
+  }
+
+  .context-menu .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .context-menu .context-menu-more {
+    width: 14px;
+    height: 14px;
+    margin-left: auto;
+    color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+  }
+
+  .context-menu-back {
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .context-menu-danger {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--color-base-300);
+  }
+
+  /* ---- the family in numbers -------------------------------------------- */
+
+  .records {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+
+  .record {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 14px 16px;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  a.record:hover,
+  a.record:focus-visible {
+    background: color-mix(in oklab, var(--color-primary) 8%, var(--color-base-100));
+    outline: none;
+  }
+
+  .record-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .record-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .record-detail {
+    font-size: 0.8125rem;
+    color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+  }
+
+  /* ---- what is missing -------------------------------------------------- */
+
+  .gap {
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+  }
+
+  .gap > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 16px;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .gap > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .gap-list {
+    margin: 0;
+    padding: 0 8px 8px;
+    list-style: none;
+  }
+
+  /* Two entries of maybe one person, and the button that makes them one. */
+  .gap-double {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0 8px;
+  }
+
+  .gap-double + .gap-double {
+    border-top: 1px solid var(--color-base-300);
+  }
+
+  .gap-double .btn {
+    align-self: flex-end;
+  }
+
+  .gap-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: var(--radius-field);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .gap-row:hover,
+  .gap-row:focus-visible {
+    background: var(--color-base-200);
+    outline: none;
+  }
+
+  .gap-row .bubble-html {
+    --bubble-size: 32px;
+    flex: none;
+  }
+
+  .gap-name {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .gap-detail {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+    text-align: right;
+  }
+
+  .gap-notes {
+    margin: 0;
+    padding: 0 16px 12px 32px;
+    font-size: 0.8125rem;
+  }
+
+  /* ---- birthdays and anniversaries -------------------------------------- */
+
+  .dates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dates-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px 10px 10px;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .dates-row:hover,
+  .dates-row:focus-visible {
+    background: color-mix(in oklab, var(--color-primary) 8%, var(--color-base-100));
+    outline: none;
+  }
+
+  .dates-row.is-today {
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
+
+  .dates-bubbles {
+    display: flex;
+    flex: none;
+  }
+
+  .dates-bubbles .bubble-html {
+    --bubble-size: 44px;
+    box-shadow: 0 0 0 2px var(--color-base-100);
+  }
+
+  /* A couple overlaps like the rings between them. */
+  .dates-bubbles .bubble-html + .bubble-html {
+    margin-left: -14px;
+  }
+
+  .dates-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .dates-name {
+    font-weight: 600;
+  }
+
+  .dates-what {
+    font-size: 0.8125rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .dates-when {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 0.875rem;
+    text-align: right;
+  }
+
+  .dates-row.is-today .dates-when strong {
+    color: var(--color-accent);
+  }
+
+  .dates-when small {
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
   }
 
 
@@ -511,6 +1228,454 @@
     overflow: auto;
   }
 
+  /* The hit Enter opens, moved with the arrow keys. */
+  .results .result.is-active {
+    background: var(--color-base-200);
+  }
+
+  /* ---- settings menu ---------------------------------------------------- */
+
+  .settings-menu > summary {
+    list-style: none;
+  }
+
+  .settings-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .settings-panel {
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: min(20rem, calc(100vw - 24px));
+    /* Taller than a small phone now; it scrolls rather than running off. */
+    max-height: calc(100dvh - 72px - env(safe-area-inset-top));
+    overflow-y: auto;
+    margin-top: 8px;
+    padding: 16px;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+  }
+
+  .settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .settings-label {
+    margin: 0;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .settings-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .settings-viewer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 10px 6px 6px;
+    border: 0;
+    border-radius: var(--radius-field);
+    background: var(--color-base-200);
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .viewer-button .bubble-html {
+    --bubble-size: 30px;
+    flex: none;
+  }
+
+  .settings-viewer .bubble-html,
+  .picker-row .bubble-html {
+    --bubble-size: 36px;
+    flex: none;
+  }
+
+  .settings-panel .join .icon,
+  .settings-links .icon {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .settings-links {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-inline: -8px;
+  }
+
+  /* ---- person picker ---------------------------------------------------- */
+
+  .picker {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 85dvh;
+    padding: 16px;
+  }
+
+  .picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .picker-title {
+    margin: 0;
+    font-size: 1.0625rem;
+    font-weight: 600;
+  }
+
+  .picker-hint {
+    margin: -6px 0 0;
+    font-size: 0.8125rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+
+  .picker-list {
+    flex: 1;
+    min-height: 0;
+    margin: 0 -8px;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+  }
+
+  .picker-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: var(--radius-field);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .picker-row:hover,
+  .picker-row:focus-visible {
+    background: var(--color-base-200);
+    outline: none;
+  }
+
+  .picker-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .picker-name {
+    font-weight: 600;
+  }
+
+  .picker-detail {
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .picker-empty {
+    padding: 12px 8px;
+    font-size: 0.875rem;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  /* ---- editing ---------------------------------------------------------- */
+
+  .sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 90dvh;
+    padding: 16px;
+  }
+
+  .sheet-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+    margin: 0 -4px;
+    padding: 0 4px 4px;
+    overflow: auto;
+  }
+
+  /* Form rows set their own display, which would otherwise beat [hidden]. */
+  .sheet [hidden] {
+    display: none !important;
+  }
+
+  /* Below 16px a phone zooms the page in on every field it focuses. */
+  .sheet .input,
+  .sheet .select,
+  .sheet .textarea {
+    font-size: 1rem;
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .form-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: color-mix(in oklab, var(--color-base-content) 75%, transparent);
+  }
+
+  .form-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  /* What belongs to a box above it, such as the date and place of a death. */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-left: 12px;
+    border-left: 2px solid var(--color-base-300);
+  }
+
+  /* A place with its country next to it; the place gets the room. */
+  .form-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 8px;
+    align-items: start;
+  }
+
+  .form-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9375rem;
+    cursor: pointer;
+  }
+
+  .date-parts {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr 5.5rem;
+    gap: 6px;
+  }
+
+  .form-error {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: var(--radius-field);
+    background: color-mix(in oklab, var(--color-error) 12%, var(--color-base-100));
+    color: var(--color-error);
+    font-size: 0.875rem;
+  }
+
+  .sheet-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sheet-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-base-300);
+  }
+
+  .relative-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.9375rem;
+  }
+
+  .relative-add,
+  .relative-existing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sheet-text {
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+  }
+
+  .photo-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+  }
+
+  .photo-tile img,
+  .photo-missing {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--radius-field);
+    object-fit: cover;
+    background: var(--color-base-200);
+  }
+
+  .photo-missing {
+    display: grid;
+    place-items: center;
+    padding: 6px;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+    text-align: center;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .photo-tile figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+  }
+
+  /* A save on its way: the button cannot be pressed twice. */
+  .loading-wait {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  /* ---- share as QR code ------------------------------------------------- */
+
+  .share {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .share .picker-header {
+    align-self: stretch;
+  }
+
+  /* White in both themes: scanners want dark modules on a light ground. */
+  .share-code {
+    width: min(72vw, 280px);
+    height: auto;
+    border-radius: var(--radius-field);
+  }
+
+  .share .picker-hint {
+    margin: 0;
+    text-align: center;
+  }
+
+  .share-url {
+    margin: 0;
+    max-width: 100%;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+  }
+
+  /* ---- lightbox --------------------------------------------------------- */
+
+  /* As large as the screen allows, small source pictures included. */
+  .lightbox-image {
+    width: min(calc(100vw - 32px), 720px);
+    height: auto;
+    max-height: calc(100dvh - 120px);
+    border-radius: var(--radius-box);
+    object-fit: contain;
+    /* Pinch, pan and swipe are the lightbox's own gestures. */
+    touch-action: none;
+    user-select: none;
+    cursor: zoom-in;
+  }
+
+  .lightbox-image[style*='scale'] {
+    cursor: grab;
+  }
+
+  .lightbox-counter {
+    position: fixed;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    margin: 0;
+    text-align: center;
+    font-size: 0.8125rem;
+    color: rgb(255 255 255 / 0.75);
+  }
+
+  .lightbox .btn {
+    position: fixed;
+  }
+
+  .lightbox-close {
+    top: calc(12px + env(safe-area-inset-top));
+    right: 12px;
+  }
+
+  .lightbox-previous,
+  .lightbox-next {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .lightbox-previous {
+    left: 8px;
+  }
+
+  .lightbox-next {
+    right: 8px;
+  }
+
+  .scope-toggle {
+    position: absolute;
+    left: 16px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    z-index: 2;
+    border-radius: 999px;
+  }
+
+  .scope-toggle .icon {
+    width: 16px;
+    height: 16px;
+  }
+
   .fab-fit {
     position: absolute;
     right: 16px;
@@ -531,6 +1696,16 @@
 
   .hint.is-leaving {
     opacity: 0;
+  }
+
+  .toast-note {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 60;
+    max-width: 420px;
+    margin-inline: auto;
   }
 
   .warnings {
@@ -613,6 +1788,10 @@
       --bubble-size: 168px;
     }
 
+    .relation-arrow {
+      margin-top: 38px;
+    }
+
     .row {
       gap: 8px 26px;
     }
@@ -623,4 +1802,18 @@
       transition: none !important;
     }
   }
+}
+
+/*
+ * Outside the layer on purpose: daisyUI's modal backdrop and button colours
+ * are unlayered, and an unlayered rule beats every layered one. The lightbox
+ * is dark in both themes, so its buttons are white in both.
+ */
+.modal.lightbox[open] {
+  background-color: rgb(0 0 0 / 0.88);
+}
+
+.modal.lightbox .btn {
+  --btn-fg: #fff;
+  color: #fff;
 }
