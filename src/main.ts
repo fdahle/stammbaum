@@ -7,6 +7,7 @@ import { LANGS, lang, setLang, t } from './i18n';
 import { relation } from './kinship';
 import { gaps } from './missing';
 import type { Person } from './parser/types';
+import { familyStats } from './stats';
 import { lifespan, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
 import { pickPerson } from './ui/picker';
@@ -17,6 +18,7 @@ import { renderMissing } from './views/missing';
 import { OverviewView } from './views/overview';
 import { renderPerson } from './views/person';
 import { renderRelation, route as relationRoute } from './views/relation';
+import { renderStats } from './views/stats';
 
 /**
  * Three-way appearance switch. "system" leaves the choice to the OS: daisyUI's
@@ -164,7 +166,7 @@ async function findRelation(): Promise<void> {
 // ---- routing --------------------------------------------------------------
 
 type Route =
-  | { kind: 'tree' | 'dates' | 'missing' }
+  | { kind: 'tree' | 'dates' | 'stats' | 'missing' }
   | { kind: 'up' | 'down' | 'person'; person: Person }
   | { kind: 'relation' | 'path'; a: Person; b: Person };
 
@@ -186,7 +188,7 @@ function parseRoute(hash: string): Route | undefined {
   });
   const [kind] = parts;
   if (kind === undefined) return { kind: 'tree' };
-  if ((kind === 'dates' || kind === 'missing') && parts.length === 1) return { kind };
+  if ((kind === 'dates' || kind === 'stats' || kind === 'missing') && parts.length === 1) return { kind };
   if (people.some((p) => !p)) return undefined;
   const [a, b] = people as Person[];
   if ((kind === 'p' || kind === 'up' || kind === 'down') && a && !b) {
@@ -259,6 +261,9 @@ function render(): void {
     }
     case 'dates':
       showPage(renderDates(upcoming(family, today(), DATES_SPAN), DATES_SPAN, caption), t().datesTitle);
+      return;
+    case 'stats':
+      showPage(renderStats(familyStats(family, today())), t().stats);
       return;
     case 'missing':
       // The page lists the file's warnings itself.
@@ -483,6 +488,7 @@ function renderMenu(): void {
   };
   entry('link', t().findRelation, () => void findRelation());
   entry('cake', t().datesTitle, '#/dates');
+  entry('chart', t().stats, '#/stats');
   entry('checklist', t().missing, '#/missing');
 
   const save = document.createElement('div');
