@@ -1,3 +1,4 @@
+import type { GapKind } from './missing';
 import type { UnionStatus } from './parser/types';
 import { readStored, writeStored } from './ui/storage';
 
@@ -65,6 +66,24 @@ const de = {
   anniversary: (kind: 'married' | 'together', years: number) =>
     kind === 'married' ? `${years}. Hochzeitstag` : `${years} ${years === 1 ? 'Jahr' : 'Jahre'} zusammen`,
   inDays: (days: number) => (days === 0 ? 'heute' : days === 1 ? 'morgen' : `in ${days} Tagen`),
+
+  more: 'Mehr',
+
+  missing: 'Was fehlt noch?',
+  missingIntro: 'Was family.md noch nicht weiß — zum Nachfragen beim nächsten Treffen.',
+  missingNone: 'Nichts — die Datei ist vollständig.',
+  fileNotes: 'Hinweise zur Datei',
+  gaps: {
+    undeclared: 'Ohne eigene person-Zeile',
+    disconnected: 'Mit dem Rest nicht verbunden',
+    noSex: 'Ohne sex= — die Beschriftung nennt beide Formen',
+    noBirth: 'Ohne Geburtsdatum',
+    partialBirth: 'Geburtsdatum unvollständig',
+    probablyDeceased: 'Über 110 Jahre und ohne died=',
+    undatedDeath: 'Todesdatum unbekannt',
+    noPhoto: 'Ohne Foto',
+  } satisfies Record<GapKind, string>,
+  line: (line: number) => `Zeile ${line}`,
 
   fit: 'Ganzen Stammbaum zeigen',
   ancestorsOf: (name: string) => `Vorfahren von ${name}`,
@@ -163,6 +182,24 @@ const en: Dict = {
   anniversary: (kind, years) =>
     kind === 'married' ? `${ordinal(years)} wedding anniversary` : `${years} ${years === 1 ? 'year' : 'years'} together`,
   inDays: (days) => (days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`),
+
+  more: 'More',
+
+  missing: 'What is missing?',
+  missingIntro: 'What family.md does not know yet — something to ask about at the next gathering.',
+  missingNone: 'Nothing — the file is complete.',
+  fileNotes: 'Notes on the file',
+  gaps: {
+    undeclared: 'No person line of their own',
+    disconnected: 'Not connected to the rest',
+    noSex: 'No sex= — captions give both forms',
+    noBirth: 'No date of birth',
+    partialBirth: 'Date of birth incomplete',
+    probablyDeceased: 'Over 110 and no died=',
+    undatedDeath: 'Date of death unknown',
+    noPhoto: 'No photo',
+  },
+  line: (line) => `line ${line}`,
 
   fit: 'Show the whole tree',
   ancestorsOf: (name) => `Ancestors of ${name}`,

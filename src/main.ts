@@ -1,10 +1,11 @@
 import './styles/app.css';
 
 import { upcoming } from './calendar';
-import { loadFamily } from './data';
+import { loadFamily, photoUrl } from './data';
 import { Family } from './family';
 import { LANGS, lang, setLang, t } from './i18n';
 import { relation } from './kinship';
+import { gaps } from './missing';
 import type { Person } from './parser/types';
 import { lifespan, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
@@ -12,6 +13,7 @@ import { pickPerson } from './ui/picker';
 import { readStored, writeStored } from './ui/storage';
 import { bubble } from './ui/tile';
 import { renderDates } from './views/dates';
+import { renderMissing } from './views/missing';
 import { OverviewView } from './views/overview';
 import { renderPerson } from './views/person';
 import { renderRelation, route as relationRoute } from './views/relation';
@@ -162,7 +164,7 @@ async function findRelation(): Promise<void> {
 // ---- routing --------------------------------------------------------------
 
 type Route =
-  | { kind: 'tree' | 'dates' }
+  | { kind: 'tree' | 'dates' | 'missing' }
   | { kind: 'up' | 'down' | 'person'; person: Person }
   | { kind: 'relation' | 'path'; a: Person; b: Person };
 
@@ -184,7 +186,7 @@ function parseRoute(hash: string): Route | undefined {
   });
   const [kind] = parts;
   if (kind === undefined) return { kind: 'tree' };
-  if (kind === 'dates' && parts.length === 1) return { kind };
+  if ((kind === 'dates' || kind === 'missing') && parts.length === 1) return { kind };
   if (people.some((p) => !p)) return undefined;
   const [a, b] = people as Person[];
   if ((kind === 'p' || kind === 'up' || kind === 'down') && a && !b) {
@@ -257,6 +259,11 @@ function render(): void {
     }
     case 'dates':
       showPage(renderDates(upcoming(family, today(), DATES_SPAN), DATES_SPAN, caption), t().datesTitle);
+      return;
+    case 'missing':
+      // The page lists the file's warnings itself.
+      document.querySelector('.warnings')?.remove();
+      showPage(renderMissing(gaps(family, (p) => !!photoUrl(p), today()), family.graph.warnings), t().missing);
       return;
     case 'tree':
       showTree(tree, undefined, undefined, viewer());
@@ -451,17 +458,32 @@ function renderMenu(): void {
   who.append(name);
   who.addEventListener('click', () => void chooseViewer());
 
-  const find = document.createElement('button');
-  find.type = 'button';
-  find.className = 'btn btn-soft btn-primary btn-sm w-full';
-  find.append(icon('link'), t().findRelation);
-  find.addEventListener('click', () => void findRelation());
-
-  const dates = document.createElement('a');
-  dates.href = '#/dates';
-  dates.className = 'btn btn-soft btn-primary btn-sm w-full';
-  dates.append(icon('cake'), t().datesTitle);
-  dates.addEventListener('click', () => (menu.open = false));
+  // Where to go and what to do: a link where there is a place, a button where
+  // something happens.
+  const more = document.createElement('div');
+  more.className = 'settings-links';
+  const entry = (glyph: IconName, label: string, target: string | (() => void)) => {
+    let element: HTMLElement;
+    if (typeof target === 'string') {
+      const link = document.createElement('a');
+      link.href = target;
+      element = link;
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      element = button;
+    }
+    element.className = 'btn btn-ghost btn-sm w-full justify-start';
+    element.append(icon(glyph), label);
+    element.addEventListener('click', () => {
+      menu.open = false;
+      if (typeof target !== 'string') target();
+    });
+    more.append(element);
+  };
+  entry('link', t().findRelation, () => void findRelation());
+  entry('cake', t().datesTitle, '#/dates');
+  entry('checklist', t().missing, '#/missing');
 
   const save = document.createElement('div');
   save.className = 'join w-full';
@@ -480,6 +502,7 @@ function renderMenu(): void {
   const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
   menuPanel.replaceChildren(
     group(t().iAm, who, hint(t().iAmHint)),
+    group(t().more, more),
     group(
       t().language,
       segmented(
@@ -503,8 +526,6 @@ function renderMenu(): void {
       ),
     ),
     group(t().saveTree, save, hint(t().saveHint)),
-    find,
-    dates,
   );
 }
 
@@ -703,7 +724,12 @@ if (family.graph.warnings.length > 0) {
     item.textContent = t().moreWarnings(rest);
     list.append(item);
   }
-  banner.append(heading, list);
+  // The whole list, with everything else the file is missing, has a page.
+  const more = document.createElement('a');
+  more.href = '#/missing';
+  more.className = 'link font-semibold';
+  more.textContent = `${t().missing} →`;
+  banner.append(heading, list, more);
   banner.addEventListener('click', () => banner.remove());
   document.body.append(banner);
 }

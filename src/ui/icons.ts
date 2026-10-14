@@ -25,6 +25,7 @@ const PATHS = {
   arrow: ['M5 12h14', 'M13 6l6 6-6 6'],
   cake: ['M4 21h16', 'M5 21v-7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7', 'M5 16.5c2.3 1.4 4.7-1.4 7 0s4.7 1.4 7 0', 'M12 12V8', 'M12 3.2c-.9 1-1.3 1.7-1.3 2.3a1.3 1.3 0 0 0 2.6 0c0-.6-.4-1.3-1.3-2.3z'],
   download: ['M12 4v11', 'M7 10l5 5 5-5', 'M5 20h14'],
+  checklist: ['M10 6h10', 'M10 12h10', 'M10 18h10', 'M4 6l1.5 1.5L8 5', 'M4 12l1.5 1.5L8 11', 'M4.5 18h2'],
 } as const;
 
 export type IconName = keyof typeof PATHS;
