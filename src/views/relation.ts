@@ -4,6 +4,7 @@ import { relation } from '../kinship';
 import type { Person } from '../parser/types';
 import { shortName } from '../ui/format';
 import { icon } from '../ui/icons';
+import { readStored, writeStored } from '../ui/storage';
 import { tile } from '../ui/tile';
 
 export interface RelationContext {
@@ -52,11 +53,23 @@ export function renderRelation(family: Family, a: Person, b: Person, context: Re
     return root;
   }
 
-  const section = document.createElement('section');
+  // Folded unless asked for: next to the words above it often says the same
+  // again. Whether it was last left open is remembered.
+  const section = document.createElement('details');
   section.className = 'relation-path-section';
-  const label = document.createElement('h2');
-  label.className = 'tier-label';
-  label.textContent = t().path;
+  section.open = readStored('stammbaum-path') === 'open';
+  section.addEventListener('toggle', () => writeStored('stammbaum-path', section.open ? 'open' : 'closed'));
+  const label = document.createElement('summary');
+  label.className = 'relation-path-toggle';
+  const chevron = icon('next');
+  chevron.classList.add('relation-path-chevron');
+  const title = document.createElement('span');
+  title.className = 'tier-label';
+  title.textContent = t().path;
+  const steps = document.createElement('span');
+  steps.className = 'relation-path-steps';
+  steps.textContent = t().steps(path.length - 1);
+  label.append(chevron, title, steps);
   const chain = document.createElement('ol');
   chain.className = 'relation-path';
   path.forEach((id, index) => {
@@ -76,7 +89,10 @@ export function renderRelation(family: Family, a: Person, b: Person, context: Re
   show.className = 'btn btn-primary btn-sm';
   show.href = `#/path/${encodeURIComponent(a.id)}/${encodeURIComponent(b.id)}`;
   show.append(icon('tree'), t().showInTree);
-  section.append(label, paragraph('relation-hint', t().pathHint), chain, show);
+  const body = document.createElement('div');
+  body.className = 'relation-path-body';
+  body.append(paragraph('relation-hint', t().pathHint), chain, show);
+  section.append(label, body);
   root.append(section);
   return root;
 }
