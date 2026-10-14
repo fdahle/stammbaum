@@ -227,6 +227,8 @@ function render(): void {
   }
   backButton.hidden = route.kind === 'tree';
   shownTree = undefined;
+  // A ring from the last search would read as part of whatever comes next.
+  for (const overview of [tree, ...subtrees.values()]) overview.unhighlight();
 
   switch (route.kind) {
     case 'person': {

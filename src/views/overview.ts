@@ -179,9 +179,15 @@ export class OverviewView {
     this.positioned = true;
     this.animateTo({ k, x: box.width / 2 - node.x * k, y: box.height / 2 - node.y * k });
 
-    if (this.highlighted) this.nodeElements.get(this.highlighted)?.classList.remove('is-focused');
+    this.unhighlight();
     this.nodeElements.get(id)?.classList.add('is-focused');
     this.highlighted = id;
+  }
+
+  /** Takes the search ring off again, once the search is no longer what is on screen. */
+  unhighlight(): void {
+    if (this.highlighted) this.nodeElements.get(this.highlighted)?.classList.remove('is-focused');
+    this.highlighted = undefined;
   }
 
   // ---- viewport -----------------------------------------------------------
