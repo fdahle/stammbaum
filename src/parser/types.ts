@@ -29,8 +29,6 @@ export interface Person {
   lives?: string;
   /** More pictures for the gallery in the detail view, next to `photo`. */
   photos?: string[];
-  /** Their user name at the login in front of the app, so it knows who is looking. */
-  login?: string;
   /** True when the person was only referenced by a relation, never declared. */
   stub?: boolean;
   /** Where the `person` line is in family.md, for warnings about them. */

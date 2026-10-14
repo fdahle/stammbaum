@@ -1,4 +1,5 @@
 import { attributeSpans, parseFamily, statementLines, stripComment, tokenize, type Attribute, type Token } from './parse';
+import { tidyText } from './tidy';
 import { unionId, type FamilyGraph, type Person, type Union } from './types';
 
 /**
@@ -9,7 +10,7 @@ import { unionId, type FamilyGraph, type Person, type Union } from './types';
  */
 
 export const PERSON_FIELDS = [
-  'name', 'nick', 'maiden', 'sex', 'born', 'died', 'birthplace', 'deathplace', 'job', 'lives', 'note', 'login', 'photo', 'photos',
+  'name', 'nick', 'maiden', 'sex', 'born', 'died', 'birthplace', 'deathplace', 'job', 'lives', 'note', 'photo', 'photos',
   'birthcountry', 'deathcountry', 'country', 'nationality',
 ] as const;
 export type PersonField = (typeof PERSON_FIELDS)[number];
@@ -34,7 +35,9 @@ export type Edit =
   | { kind: 'add-partnership'; partners: string[]; set: Changes<UnionField> }
   | { kind: 'partnership'; union: string; set: Changes<UnionField>; was?: Changes<UnionField> }
   | { kind: 'delete-partnership'; union: string }
-  | { kind: 'rename-id'; id: string; to: string };
+  | { kind: 'rename-id'; id: string; to: string }
+  | { kind: 'tidy' }
+  | { kind: 'merge'; keep: string; drop: string };
 
 export class EditError extends Error {
   constructor(
@@ -83,6 +86,26 @@ export function applyEdits(
       case 'rename-id':
         rename(resolve(edit.id), edit.to);
         break;
+      case 'merge': {
+        const keep = resolve(edit.keep);
+        const drop = resolve(edit.drop);
+        mergePeople(doc, keep, drop);
+        for (const [old, now] of Object.entries(renamed)) if (now === drop) renamed[old] = keep;
+        renamed[drop] = keep;
+        break;
+      }
+      case 'tidy': {
+        // Ids the app made in an earlier form get today's — `felix` becomes `felix-dahle`.
+        for (const person of [...doc.graph().people.values()]) {
+          if (person.stub || !madeFrom(person.name, person.id)) continue;
+          const graph = doc.graph();
+          const others = { ...graph, people: new Map([...graph.people].filter(([id]) => id !== person.id)) };
+          const wanted = newId(person.name, others, person.born);
+          if (wanted !== person.id) rename(person.id, wanted);
+        }
+        doc.replace(tidyText(doc.text()));
+        break;
+      }
       case 'add-person':
         if (!edit.ref.startsWith('$')) throw new EditError('invalid', 'a new person needs a $reference');
         created[edit.ref] = addPerson(doc, edit.set, edit.near && { id: resolve(edit.near.id), side: edit.near.side });
@@ -162,6 +185,12 @@ class Doc {
 
   insert(index: number, text: string): void {
     this.lines.splice(index, 0, text);
+    this.cache = {};
+  }
+
+  /** All of it at once — for tidying, which moves every line. */
+  replace(text: string): void {
+    this.lines = text.split(/\r?\n/);
     this.cache = {};
   }
 
@@ -307,7 +336,7 @@ function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Chang
   const others = { ...graph, people: new Map([...graph.people].filter(([other]) => other !== id)) };
   // Someone only named in a relation so far had their id written there by hand.
   const made = !person.stub && madeFrom(person.name, id);
-  const nextId = name && name !== person.name && made ? newId(name, others) : undefined;
+  const nextId = name && name !== person.name && made ? newId(name, others, person.born) : undefined;
 
   const lines = personLines(doc, id);
   if (lines.length === 0) {
@@ -366,7 +395,52 @@ function renameId(doc: Doc, from: string, to: string): void {
   if (from === to) return;
   if (doc.graph().people.has(to)) throw new EditError('invalid', `"${to}" is taken`);
   if (!/^[^\s"\\,=%+]+$/.test(to) || to.includes('->') || to.startsWith('$')) throw new EditError('invalid', `"${to}" cannot be an id`);
+  swapId(doc, from, to);
+}
 
+/**
+ * Makes \`drop\` and \`keep\` one person: whatever \`keep\` does not say yet is
+ * taken from \`drop\`, \`drop\`'s own lines go, and every relation and the
+ * \`me\` line name \`keep\` instead — a child listed twice then only once.
+ */
+function mergePeople(doc: Doc, keep: string, drop: string): void {
+  const graph = doc.graph();
+  const kept = graph.people.get(keep);
+  const dropped = graph.people.get(drop);
+  if (!kept || !dropped) throw new EditError('conflict', `"${kept ? drop : keep}" is no longer in the file`);
+  if (keep === drop) throw new EditError('invalid', 'the same person twice');
+  const set: Changes<PersonField> = {};
+  for (const key of PERSON_FIELDS) {
+    if (key !== 'name' && personValue(kept, key) === undefined && personValue(dropped, key) !== undefined) set[key] = personValue(dropped, key)!;
+  }
+  if (Object.keys(set).length > 0) editPerson(doc, keep, set);
+  for (const line of personLines(doc, drop).reverse()) doc.remove(line.statement.index);
+  swapId(doc, drop, keep);
+
+  // Children of the same parents twice over, now that both are \`keep\`.
+  for (const statement of doc.statements()) {
+    const head = statement.tokens[0];
+    if (!head || head.quoted || head.value === 'person' || head.value === 'me') continue;
+    const changes: Array<{ start: number; end: number; text: string }> = [];
+    const relation = relationLine(statement);
+    const listed = split(relation.children.map((t) => t.value).join(' '));
+    if (listed.filter((id) => id === keep).length > 1) {
+      const first = relation.children[0]!;
+      const last = relation.children.at(-1)!;
+      changes.push({ start: first.start, end: last.end, text: [...new Set(listed)].join(', ') });
+    }
+    for (const a of relation.attributes) {
+      const values = split(a.value);
+      if ((a.key === 'children' || a.key === 'adopted') && values.filter((id) => id === keep).length > 1) {
+        changes.push({ start: a.start, end: a.end, text: `${a.key}=${[...new Set(values)].join(', ')}` });
+      }
+    }
+    if (changes.length > 0) doc.set(statement.index, rewrite(statement.raw, changes));
+  }
+}
+
+/** Every place the file names \`from\` — its lines, relations, \`me\` — names \`to\`. */
+function swapId(doc: Doc, from: string, to: string): void {
   // A list of ids as written, `a,` or `a, b`: each name in it swapped on its own.
   const swapList = (text: string) => text.replace(/[^,\s]+/g, (word) => (word === from ? to : word));
   for (const statement of doc.statements()) {
@@ -404,7 +478,7 @@ const BESIDE: Partial<Record<PersonField, PersonField>> = {
 /** The order new person lines list their keys in — the order the sample uses. */
 const PERSON_ORDER: PersonField[] = [
   'sex', 'born', 'died', 'photo', 'photos', 'birthplace', 'birthcountry', 'deathplace', 'deathcountry',
-  'maiden', 'nick', 'job', 'lives', 'country', 'nationality', 'login', 'note',
+  'maiden', 'nick', 'job', 'lives', 'country', 'nationality', 'note',
 ];
 
 function insertPerson(doc: Doc, id: string, set: Changes<PersonField>, at: number): void {
@@ -419,7 +493,7 @@ function insertPerson(doc: Doc, id: string, set: Changes<PersonField>, at: numbe
 function addPerson(doc: Doc, set: Changes<PersonField>, near?: { id: string; side: 'before' | 'after' }): string {
   const values = Object.fromEntries(cleanChanges(set, PERSON_FIELDS)) as Changes<PersonField>;
   if (!values.name) throw new EditError('invalid', 'a name is needed');
-  const id = newId(values.name, doc.graph());
+  const id = newId(values.name, doc.graph(), values.born ?? undefined);
   let at = doc.end();
   if (near) {
     const lines = personLines(doc, near.id);
@@ -430,24 +504,29 @@ function addPerson(doc: Doc, set: Changes<PersonField>, near?: { id: string; sid
 }
 
 /**
- * A short, readable, stable id from the name: the first name if it is free,
- * then first and last name, then a number — `klaus`, `klaus-bauer`, `klaus2`.
+ * A readable id that tells people apart: the whole name, then with the year
+ * of birth when two share it, then a number — `klaus-bauer`,
+ * `klaus-bauer-1958`, `klaus-bauer-2`. It is what the address shows: `#/p/klaus-bauer`.
  */
-export function newId(name: string, graph: FamilyGraph): string {
-  const words = idWords(name);
-  const first = words[0] || 'person';
+export function newId(name: string, graph: FamilyGraph, born?: string): string {
+  const full = idWords(name).join('-') || 'person';
   const free = (id: string) => !graph.people.has(id);
-  if (free(first)) return first;
-  const full = words.join('-');
-  if (words.length > 1 && free(full)) return full;
-  for (let n = 2; ; n++) if (free(`${first}${n}`)) return `${first}${n}`;
+  if (free(full)) return full;
+  const year = /^\d{4}/.exec(born ?? '')?.[0];
+  if (year && free(`${full}-${year}`)) return `${full}-${year}`;
+  for (let n = 2; ; n++) if (free(`${full}-${n}`)) return `${full}-${n}`;
 }
 
-/** Whether `id` is one `newId` could have made from `name`, whichever of its forms was free then. */
-function madeFrom(name: string, id: string): boolean {
+/**
+ * Whether `id` is one the app made from `name` — in today's form or the
+ * earlier one, which started with the first name alone: `klaus`, `klaus2`.
+ */
+export function madeFrom(name: string, id: string): boolean {
   const words = idWords(name);
   const first = words[0] || 'person';
-  return id === first || id === words.join('-') || (id.startsWith(first) && /^\d+$/.test(id.slice(first.length)));
+  const full = words.join('-') || 'person';
+  const numbered = (stem: string, dash: string) => id.startsWith(stem + dash) && /^\d+$/.test(id.slice(stem.length + dash.length));
+  return id === full || numbered(full, '-') || id === first || numbered(first, '');
 }
 
 /** A name as the words an id is made of: "Jürgen Groß" → `juergen`, `gross`. */
@@ -588,8 +667,9 @@ function addPartnership(doc: Doc, partners: string[], set: Changes<UnionField>):
   const current = currentUnion(doc, partners);
   if (current && !isOver(current)) throw new EditError('invalid', 'the two already are partners');
   const values = Object.fromEntries(cleanChanges(set, UNION_FIELDS)) as Changes<UnionField>;
-  // Without a start the line would join the ended partnership instead of beginning a new one.
-  if (!values.married && !values.together) throw new EditError('invalid', 'a partnership needs married= or together=');
+  // A bare `a + b` is a marriage already. Only a couple whose earlier
+  // partnership ended needs the start written, or the line would join that one.
+  if (!values.married && !values.together && current) values.married = '?';
   const parts = [partners.join(' + ')];
   for (const key of UNION_FIELDS) if (values[key]) parts.push(attribute(key, values[key]!));
   const at = relationSpot(doc, partners);

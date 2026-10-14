@@ -62,7 +62,11 @@ describe('editing a person', () => {
 
   it('renames, and takes fields out', () => {
     const { markdown } = apply({ kind: 'person', id: 'elisabeth', set: { name: 'Elisabeth Maria Bauer', nick: null } });
-    expect(changed(markdown).added).toEqual(['person elisabeth "Elisabeth Maria Bauer"  sex=f born=1934']);
+    // The id came from the name, so it follows it.
+    expect(changed(markdown).added).toEqual([
+      'person elisabeth-maria-bauer "Elisabeth Maria Bauer"  sex=f born=1934',
+      'heinrich + elisabeth-maria-bauer married=1956 -> klaus, brigitte',
+    ]);
   });
 
   it('treats an empty value as taking the field out', () => {
@@ -104,12 +108,12 @@ describe('adding people and relations', () => {
       { kind: 'add-person', ref: '$kid', set: { name: 'Nina Bauer', sex: 'f', born: '1986-02-17' }, near: { id: 'jonas', side: 'before' } },
       { kind: 'add-child', parents: ['klaus', 'sabine'], child: '$kid' },
     );
-    expect(created).toEqual({ $kid: 'nina' });
+    expect(created).toEqual({ $kid: 'nina-bauer' });
     expect(changed(markdown)).toEqual({
       removed: ['klaus + sabine married=1984 divorced=1996 -> jonas'],
-      added: ['klaus + sabine married=1984 divorced=1996 -> jonas, nina', 'person nina "Nina Bauer" sex=f born=1986-02-17'],
+      added: ['klaus + sabine married=1984 divorced=1996 -> jonas, nina-bauer', 'person nina-bauer "Nina Bauer" sex=f born=1986-02-17'],
     });
-    expect(markdown.indexOf('person nina')).toBeLessThan(markdown.indexOf('person jonas'));
+    expect(markdown.indexOf('person nina-bauer')).toBeLessThan(markdown.indexOf('person jonas'));
   });
 
   it('starts a new line for a new couple, after what is said about them', () => {
@@ -120,12 +124,12 @@ describe('adding people and relations', () => {
       { kind: 'add-child', parents: ['jonas', '$p'], child: '$kid' },
     ).markdown.split('\n');
     // Jonas is in no partnership yet, so the couple goes after the newest of their person lines.
-    const at = lines.indexOf('person petra "Petra Lange"');
+    const at = lines.indexOf('person petra-lange "Petra Lange"');
     expect(lines.slice(at - 1, at + 3)).toEqual([
       'person jonas "Jonas Bauer" sex=m',
-      'person petra "Petra Lange"',
-      'person mia "Mia Bauer"',
-      'jonas + petra together=2015 -> mia',
+      'person petra-lange "Petra Lange"',
+      'person mia-bauer "Mia Bauer"',
+      'jonas + petra-lange together=2015 -> mia-bauer',
     ]);
   });
 
@@ -143,18 +147,23 @@ describe('adding people and relations', () => {
     expect(parseFamily(markdown).unions.find((u) => u.id === 'brigitte')?.children).toEqual(['jonas']);
   });
 
-  it('picks ids that are short, free and readable', () => {
+  it('picks ids from the whole name, then the year of birth, then a number', () => {
     const { created } = apply(
-      { kind: 'add-person', ref: '$a', set: { name: 'Klaus Müller' } },
-      { kind: 'add-person', ref: '$b', set: { name: 'Klaus Müller' } },
-      { kind: 'add-person', ref: '$c', set: { name: 'Jürgen Weiß' } },
+      { kind: 'add-person', ref: '$a', set: { name: 'Klaus Müller', born: '1958' } },
+      { kind: 'add-person', ref: '$b', set: { name: 'Klaus Müller', born: '1987-04-02' } },
+      { kind: 'add-person', ref: '$c', set: { name: 'Klaus Müller' } },
+      { kind: 'add-person', ref: '$d', set: { name: 'Jürgen Weiß' } },
     );
-    expect(created).toEqual({ $a: 'klaus-mueller', $b: 'klaus2', $c: 'juergen' });
+    expect(created).toEqual({ $a: 'klaus-mueller', $b: 'klaus-mueller-1987', $c: 'klaus-mueller-2', $d: 'juergen-weiss' });
   });
 
-  it('refuses a partnership that already lasts, and one without a start', () => {
+  it('refuses a partnership that already lasts', () => {
     expect(() => apply({ kind: 'add-partnership', partners: ['heinrich', 'elisabeth'], set: { married: '2000' } })).toThrow(/already/);
-    expect(() => apply({ kind: 'add-partnership', partners: ['klaus', 'brigitte'], set: {} })).toThrow(/married= or together=/);
+  });
+
+  it('writes a marriage without a date as the bare couple — unless the two were married before', () => {
+    expect(apply({ kind: 'add-partnership', partners: ['klaus', 'brigitte'], set: {} }).markdown).toContain('\nklaus + brigitte\n');
+    expect(apply({ kind: 'add-partnership', partners: ['klaus', 'sabine'], set: {} }).markdown).toContain('\nklaus + sabine married=?\n');
   });
 
   it('lets a divorced couple marry again, as a second partnership', () => {
@@ -269,8 +278,8 @@ describe('siblings', () => {
       { kind: 'add-child', parents: ['$parent0'], child: 'felix' },
       { kind: 'add-child', parents: ['$parent0'], child: 'carolina' },
     ]);
-    expect(created).toEqual({ $parent0: 'eltern' });
-    expect(markdown).toBe('```family\nperson eltern "Eltern von Felix"\neltern -> felix, carolina\nperson felix "Felix Dahle"\nperson carolina "Carolina Dahle"\n```\n');
+    expect(created).toEqual({ $parent0: 'eltern-von-felix' });
+    expect(markdown).toBe('```family\nperson eltern-von-felix "Eltern von Felix"\neltern-von-felix -> felix, carolina\nperson felix "Felix Dahle"\nperson carolina "Carolina Dahle"\n```\n');
   });
 });
 
@@ -304,15 +313,14 @@ describe('ids that follow the name', () => {
 
   it('gives a stand-in an id from its real name once it has one', () => {
     const { markdown, renamed } = applyEdits(file, [{ kind: 'person', id: 'eltern', set: { name: 'Christian Dahle' } }]);
-    expect(renamed).toEqual({ eltern: 'christian' });
+    expect(renamed).toEqual({ eltern: 'christian-dahle' });
     expect(markdown).not.toMatch(/\beltern\b/);
-    expect(markdown).toContain('me christian\nperson christian "Christian Dahle"\nchristian -> felix, carolina');
-    expect(markdown).toContain('oma + christian adopted=felix, carolina');
+    expect(markdown).toContain('me christian-dahle\nperson christian-dahle "Christian Dahle"\nchristian-dahle -> felix, carolina');
+    expect(markdown).toContain('oma + christian-dahle adopted=felix, carolina');
   });
 
-  it('keeps an id written by hand, and one the new name would give anyway', () => {
+  it('keeps an id written by hand', () => {
     expect(applyEdits(file, [{ kind: 'person', id: 'oma', set: { name: 'Gisela Vogt' } }]).renamed).toEqual({});
-    expect(applyEdits(file, [{ kind: 'person', id: 'felix', set: { name: 'Felix Müller' } }]).renamed).toEqual({});
   });
 
   it('refuses an id that is taken or could not be read back', () => {
@@ -324,7 +332,27 @@ describe('ids that follow the name', () => {
 describe('ids made when the short one was taken', () => {
   it('follow the name too', () => {
     const file = '```family\nperson eltern-von-christian "Eltern von Christian"\nperson eltern2 "Eltern von Heiko"\neltern-von-christian -> christian\n```\n';
-    expect(applyEdits(file, [{ kind: 'person', id: 'eltern-von-christian', set: { name: 'Ursula Dahle' } }]).renamed).toEqual({ 'eltern-von-christian': 'ursula' });
-    expect(applyEdits(file, [{ kind: 'person', id: 'eltern2', set: { name: 'Bernd Dahle' } }]).renamed).toEqual({ eltern2: 'bernd' });
+    expect(applyEdits(file, [{ kind: 'person', id: 'eltern-von-christian', set: { name: 'Ursula Dahle' } }]).renamed).toEqual({ 'eltern-von-christian': 'ursula-dahle' });
+    expect(applyEdits(file, [{ kind: 'person', id: 'eltern2', set: { name: 'Bernd Dahle' } }]).renamed).toEqual({ eltern2: 'bernd-dahle' });
+  });
+});
+
+describe('one person entered twice', () => {
+  const file = '```family\nme erna2\nperson erna "Erna Tanke" sex=f\nperson erna2 "Erna Tanke" born=1940 birthplace=Lindau\nerna + hermann -> birgit\nerna2 -> birgit, detlef\nperson hermann "Hermann Tanke"\n```\n';
+
+  it('becomes one: the details joined, every link moved, nothing listed twice', () => {
+    const { markdown, renamed } = applyEdits(file, [{ kind: 'merge', keep: 'erna', drop: 'erna2' }]);
+    expect(renamed).toEqual({ erna2: 'erna' });
+    expect(markdown).toBe('```family\nme erna\nperson erna "Erna Tanke" sex=f born=1940 birthplace=Lindau\nerna + hermann -> birgit\nerna -> birgit, detlef\nperson hermann "Hermann Tanke"\n```\n');
+    const graph = parseFamily(markdown);
+    expect(graph.people.has('erna2')).toBe(false);
+    expect(graph.people.get('erna')).toMatchObject({ sex: 'f', born: '1940', birthplace: 'Lindau' });
+  });
+
+  it('lists a child once when both had them on the same line', () => {
+    const twice = '```family\nperson a "A"\nperson a2 "A"\na + b -> c, d\nb + a2 -> c\n```\n';
+    const { markdown } = applyEdits(twice, [{ kind: 'merge', keep: 'a', drop: 'a2' }]);
+    expect(markdown).toBe('```family\nperson a "A"\na + b -> c, d\nb + a -> c\n```\n');
+    expect(parseFamily(markdown).unions.find((u) => u.partners.includes('a') && u.partners.includes('b'))?.children).toEqual(['c', 'd']);
   });
 });

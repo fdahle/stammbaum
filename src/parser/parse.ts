@@ -7,7 +7,7 @@ import { type Diagnostic, type FamilyGraph, type Person, type Sex, type Union, u
  * markdown prose that the parser ignores. Grammar (one statement per line):
  *
  *   person <id> "<Name>" [key=value ...]     born= died= photo= maiden= nick= note= sex=
- *                                            birthplace= deathplace= job= lives= photos= login=
+ *                                            birthplace= deathplace= job= lives= photos=
  *                                            birthcountry= deathcountry= country= nationality=
  *   <a> + <b> [key=value ...]                married= divorced= together= separated= adopted=
  *   <a> + <b> -> <child>, <child>            children of that union
@@ -152,7 +152,7 @@ function unescape(value: string): string {
 
 const PERSON_KEYS = new Set([
   'born', 'died', 'photo', 'maiden', 'nick', 'note', 'sex',
-  'birthplace', 'deathplace', 'job', 'lives', 'photos', 'login',
+  'birthplace', 'deathplace', 'job', 'lives', 'photos',
   'birthcountry', 'deathcountry', 'country', 'nationality',
 ]);
 /** `w` for weiblich, since the people writing the file speak German. */

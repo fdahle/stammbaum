@@ -8,6 +8,8 @@ export interface FamilySource {
   markdown: string;
   /** Picture URLs by lower-case file name. */
   photos: Map<string, string>;
+  /** Small versions for the bubbles, by the same names — not every photo has one. */
+  thumbs: Map<string, string>;
   /** Changes with every edit, to notice someone else's. */
   version: string;
   /** How current this copy is: when the file last changed, or the family commit it was built from. */

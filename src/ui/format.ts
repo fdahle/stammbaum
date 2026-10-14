@@ -1,14 +1,38 @@
 import { t } from '../i18n';
 import { isDeceased, knownDate, type Person } from '../parser/types';
 
+/**
+ * What a stand-in is to whoever is looking — "Urgroßmutter" rather than
+ * "Mutter von Erna". The app sets it (main.ts), since it knows who looks.
+ */
+let standInWord: (person: Person) => string | undefined = () => undefined;
+
+export function nameStandIns(word: (person: Person) => string | undefined): void {
+  standInWord = word;
+}
+
 /** What we call someone in a bubble: the nickname if the family uses one. */
 export function shortName(person: Person): string {
+  if (isStandIn(person)) return standInWord(person) ?? person.name.split(' ')[0]!;
   return person.nick ?? person.name.split(' ')[0]!;
 }
 
 export function familyName(person: Person): string {
+  // A stand-in has no surname: "unbekannt" under what they are to the viewer.
+  if (isStandIn(person) && standInWord(person)) return t().unknownPerson;
   const parts = person.name.split(' ');
   return parts.length > 1 ? parts.slice(1).join(' ') : '';
+}
+
+/** The full name, with the name the family calls them in between: "Alexandra (Trini) Unger". */
+export function displayName(person: Person): string {
+  if (isStandIn(person)) {
+    const word = standInWord(person);
+    return word ? `${word} (${t().unknownPerson})` : person.name;
+  }
+  const [first, ...rest] = person.name.split(' ');
+  if (!person.nick || person.nick === first) return person.name;
+  return [first, `(${person.nick})`, ...rest].join(' ');
 }
 
 /**

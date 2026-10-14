@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Family } from '../src/family';
-import { gaps } from '../src/missing';
+import { duplicates, gaps } from '../src/missing';
 import { parseFamily } from '../src/parser/parse';
 
 const family = new Family(
@@ -47,5 +47,23 @@ describe('gaps', () => {
   it('knows people mentioned only in a relation', () => {
     const stub = gaps(new Family(parseFamily('```family\nperson a "A"\na -> ghost\n```')), () => true, { y: 2026 });
     expect(stub[0]).toMatchObject({ kind: 'undeclared', people: [{ person: { id: 'ghost' } }] });
+  });
+});
+
+describe('people entered twice', () => {
+  it('pairs the same name, or a birth name, unless something tells them apart', () => {
+    const family = new Family(
+      parseFamily(`\`\`\`family
+person erna "Erna Tanke" sex=f born=1940
+person erna2 "Erna Tanke"
+person birgit "Birgit Dahle" maiden=Tanke
+person birgit2 "Birgit Tanke" born=1965
+person klaus "Klaus Bauer" born=1958
+person klaus2 "Klaus Bauer" born=1987
+person mutter "Mutter von Erna"
+person mutter2 "Mutter von Erna"
+\`\`\``),
+    );
+    expect(duplicates(family).map(([a, b]) => `${a.id}=${b.id}`)).toEqual(['erna=erna2', 'birgit=birgit2']);
   });
 });

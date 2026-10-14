@@ -77,8 +77,8 @@ describe('the family api', () => {
     });
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.created).toEqual({ $c: 'clara' });
-    expect(body.family.markdown).toContain('anna + ben married=1975 -> clara');
+    expect(body.created).toEqual({ $c: 'clara-berg' });
+    expect(body.family.markdown).toContain('anna + ben married=1975 -> clara-berg');
     expect(await readFile(path.join(dir, 'family.md'), 'utf8')).toBe(body.family.markdown);
 
     const history = await readdir(path.join(dir, 'history'));
@@ -128,6 +128,25 @@ describe('the family api', () => {
     expect((await upload(Buffer.from('<svg/>'), 'image/svg+xml')).status).toBe(403);
     expect((await upload(Buffer.from('<html>'), 'image/png')).status).toBe(400);
     expect((await readdir(path.join(dir, 'photos'))).sort()).toEqual(['Anna.JPG', 'anna-berg-2.jpg', 'anna-berg.jpg']);
+  });
+
+  it('keeps a small version of a photo for the bubbles', async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 9]);
+    const thumb = (of: string, body: Buffer, type = 'image/jpeg') =>
+      fetch(`${base}/api/photos?thumb=${encodeURIComponent(of)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': type, 'X-Stammbaum': 'edit', 'Remote-User': 'anna' },
+        body: new Uint8Array(body),
+      });
+    expect((await thumb('ANNA-BERG.jpg', jpeg)).status).toBe(200);
+    const served = await fetch(`${base}/thumbs/anna-berg.jpg`);
+    expect(served.headers.get('content-type')).toBe('image/jpeg');
+    expect(Buffer.from(await served.arrayBuffer())).toEqual(jpeg);
+    expect((await (await fetch(`${base}/api/family`)).json()).thumbs).toEqual(['anna-berg.jpg']);
+
+    expect((await thumb('nobody.jpg', jpeg)).status).toBe(404);
+    expect((await thumb('anna-berg.jpg', Buffer.from('<svg/>'), 'image/svg+xml')).status).toBe(403);
+    expect((await fetch(`${base}/thumbs/..%2Fanna-berg.jpg`)).status).toBe(404);
   });
 
   it('turns away a picture that is too large', async () => {

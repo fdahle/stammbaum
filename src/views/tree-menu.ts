@@ -1,7 +1,7 @@
 import { addPhotos, confirmDelete, confirmUnlink, namesOf, openAddRelative, openEditor, openNewPerson, openPartnership, type EditorContext } from '../edit/editor';
 import type { Family } from '../family';
 import { t } from '../i18n';
-import { shortName } from '../ui/format';
+import { displayName, shortName } from '../ui/format';
 import type { MenuItem } from '../ui/menu';
 import type { TreeTarget } from './overview';
 
@@ -42,7 +42,7 @@ export function treeMenu(target: TreeTarget, context: TreeMenuContext): { title:
         { icon: 'trash', label: t().deletePerson, action: () => confirmDelete(person, editor), danger: true },
       );
     }
-    return { title: person.name, items };
+    return { title: displayName(person), items };
   }
 
   if (target.kind === 'union') {

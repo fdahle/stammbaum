@@ -11,6 +11,7 @@ function toSource(payload: FamilyPayload): FamilySource {
   return {
     markdown: payload.markdown,
     photos: new Map(payload.photos.map((name) => [name.toLowerCase(), url(`photos/${encodeURIComponent(name)}`)])),
+    thumbs: new Map(payload.thumbs.map((name) => [name.toLowerCase(), url(`thumbs/${encodeURIComponent(name)}`)])),
     version: payload.version,
     stamp: payload.updated ? { updated: payload.updated } : {},
     editable: payload.editable,
@@ -48,6 +49,16 @@ export async function saveEdits(edits: Edit[], message: string): Promise<Saved> 
   if (!response.ok || !body.family) throw new Error(body.error ?? `api/edits: ${response.status}`);
   etag = null;
   return { source: toSource(body.family), created: body.created ?? {}, renamed: body.renamed ?? {} };
+}
+
+/** The small version of a photo already in photos/. */
+export async function uploadThumb(photo: string, image: Blob): Promise<void> {
+  const response = await fetch(url(`api/photos?thumb=${encodeURIComponent(photo)}`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/jpeg', 'X-Stammbaum': 'edit' },
+    body: image,
+  });
+  if (!response.ok) throw new Error(`api/photos: ${response.status}`);
 }
 
 /** Puts a picture into photos/; resolves to the file name it got there. */

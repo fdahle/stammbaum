@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+import { tidyText } from '../src/parser/tidy';
 import { applyEdits, EditError, type Edit } from '../src/parser/write';
 
 /**
@@ -32,6 +33,8 @@ export interface FamilyPayload {
   version: string;
   /** File names in photos/. */
   photos: string[];
+  /** The photos among them that have a small version for the bubbles. */
+  thumbs: string[];
   /** When family.md last changed, ISO. */
   updated: string | undefined;
   /** Whether whoever asked may edit. */
@@ -63,7 +66,10 @@ const UPLOADS: Record<string, { extension: string; is: (head: Buffer) => boolean
 
 const MAX_BODY = 256 * 1024;
 const MAX_PHOTO = 15 * 1024 * 1024;
+const THUMB_SIZE = 512 * 1024;
 const MAX_EDITS = 50;
+/** How many earlier versions of family.md history/ keeps. */
+const KEEP_COPIES = 50;
 
 type Next = () => void;
 
@@ -78,11 +84,13 @@ export function familyApi(options: ApiOptions): (request: IncomingMessage, respo
   const payload = async (user: string | undefined): Promise<FamilyPayload> => {
     const markdown = await readFile(file, 'utf8').catch(() => '');
     const updated = await stat(file).then((s) => s.mtime.toISOString(), () => undefined);
-    const photos = await readdir(path.join(options.dataDir, 'photos')).catch(() => [] as string[]);
+    const photos = (await readdir(path.join(options.dataDir, 'photos')).catch(() => [] as string[])).filter((name) => extension(name) in IMAGE_TYPES);
+    const small = new Set((await readdir(thumbFolder(options.dataDir)).catch(() => [] as string[])).map((name) => name.toLowerCase()));
     return {
       markdown,
       version: createHash('sha256').update(markdown).digest('hex').slice(0, 16),
-      photos: photos.filter((name) => extension(name) in IMAGE_TYPES),
+      photos,
+      thumbs: photos.filter((name) => small.has(thumbName(name))),
       updated,
       editable: editable(user),
     };
@@ -128,6 +136,10 @@ export function familyApi(options: ApiOptions): (request: IncomingMessage, respo
       return json(response, status, { error: error.message, family: await payload(user) });
     }
 
+    // A tidy file stays tidy: whatever was added lands where it belongs.
+    // One kept in an order of its own is left in it.
+    if (tidyText(before) === before) result.markdown = tidyText(result.markdown);
+
     if (result.markdown !== before) {
       await keepHistory(options.dataDir, before, user, message);
       // Written next to the file and renamed over it: never half a family.md.
@@ -142,8 +154,37 @@ export function familyApi(options: ApiOptions): (request: IncomingMessage, respo
    * A picture into photos/, under a free name built from `?name=` — `klaus.jpg`,
    * then `klaus-2.jpg`. Which person shows it is a separate edit of family.md.
    */
+  /**
+   * The small version of a photo, made by the browser that uploaded it — so
+   * the server needs no image library. Always a JPEG, at most THUMB_SIZE.
+   */
+  const uploadThumb = async (request: IncomingMessage, response: ServerResponse, of: string) => {
+    const user = editor(request, response, (type) => type.split(';')[0]!.trim() === 'image/jpeg');
+    if (!user) return;
+    let image: Buffer;
+    try {
+      image = await readBody(request, THUMB_SIZE);
+    } catch {
+      response.setHeader('Connection', 'close');
+      return json(response, 413, { error: 'too large' });
+    }
+    if (!UPLOADS['image/jpeg']!.is(image)) return json(response, 400, { error: 'not a JPEG' });
+    const photos = await readdir(path.join(options.dataDir, 'photos')).catch(() => [] as string[]);
+    const original = photos.find((name) => name.toLowerCase() === of.toLowerCase() && extension(name) in IMAGE_TYPES);
+    if (!original) return json(response, 404, { error: 'no such photo' });
+    const folder = thumbFolder(options.dataDir);
+    await mkdir(folder, { recursive: true });
+    const temporary = path.join(folder, `.${thumbName(original)}.saving`);
+    await writeFile(temporary, image);
+    await rename(temporary, path.join(folder, thumbName(original)));
+    json(response, 200, { thumb: original });
+  };
+
   const upload = async (request: IncomingMessage, response: ServerResponse) => {
     const kind = UPLOADS[String(request.headers['content-type']).split(';')[0]!.trim().toLowerCase()];
+    const { searchParams: query } = new URL(request.url ?? '/', 'http://local');
+    const of = query.get('thumb');
+    if (of !== null) return uploadThumb(request, response, of);
     const user = editor(request, response, () => !!kind);
     if (!user || !kind) return;
 
@@ -181,7 +222,7 @@ export function familyApi(options: ApiOptions): (request: IncomingMessage, respo
     if (pathname === '/api/family' && request.method === 'GET') {
       payload(options.user(request))
         .then((family) => {
-          const etag = `"${family.version}-${family.editable ? 1 : 0}"`;
+          const etag = `"${family.version}-${family.editable ? 1 : 0}-${family.photos.length}-${family.thumbs.length}"`;
           response.setHeader('ETag', etag);
           response.setHeader('Cache-Control', 'no-cache');
           if (request.headers['if-none-match'] === etag) {
@@ -195,6 +236,8 @@ export function familyApi(options: ApiOptions): (request: IncomingMessage, respo
     } else if (pathname === '/api/photos' && request.method === 'POST') {
       // In the same queue, so two uploads never pick the same free name.
       queue = queue.then(() => upload(request, response)).catch(fail);
+    } else if (pathname.startsWith('/thumbs/') && (request.method === 'GET' || request.method === 'HEAD')) {
+      thumb(options.dataDir, decodeURIComponent(pathname.slice('/thumbs/'.length)), response).catch(fail);
     } else if (pathname.startsWith('/photos/') && (request.method === 'GET' || request.method === 'HEAD')) {
       photo(options.dataDir, decodeURIComponent(pathname.slice('/photos/'.length)), response).catch(fail);
     } else {
@@ -210,6 +253,9 @@ async function keepHistory(dataDir: string, before: string, user: string, messag
   if (before !== '') {
     const stamp = now.toISOString().replace(/[:.]/g, '-');
     await writeFile(path.join(folder, `family-${stamp}.md`), before, 'utf8');
+    // Enough to take back a slip, without growing for ever: the newest ones stay.
+    const copies = (await readdir(folder)).filter((name) => /^family-.*\.md$/.test(name)).sort();
+    await Promise.all(copies.slice(0, -KEEP_COPIES).map((name) => unlink(path.join(folder, name))));
   }
   await appendFile(path.join(folder, 'changes.log'), `${now.toISOString()}\t${user}\t${message}\n`, 'utf8');
 }
@@ -251,6 +297,31 @@ async function photo(dataDir: string, name: string, response: ServerResponse): P
   response.setHeader('Cache-Control', 'private, max-age=3600');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   createReadStream(path.join(folder, match)).pipe(response);
+}
+
+/** Small versions live next to the photos, hidden: photos/.thumbs/heinrich.jpg.jpg */
+function thumbFolder(dataDir: string): string {
+  return path.join(dataDir, 'photos', '.thumbs');
+}
+
+function thumbName(photo: string): string {
+  return `${photo.toLowerCase()}.jpg`;
+}
+
+/** A photo's small version, or the 404 the app falls back from. */
+async function thumb(dataDir: string, name: string, response: ServerResponse): Promise<void> {
+  const safe = !/[\\/]/.test(name) && !name.startsWith('.');
+  const file = path.join(thumbFolder(dataDir), thumbName(name));
+  const found = safe && (await stat(file).then((s) => s.isFile(), () => false));
+  if (!found) {
+    response.statusCode = 404;
+    response.end('not found');
+    return;
+  }
+  response.setHeader('Content-Type', 'image/jpeg');
+  response.setHeader('Cache-Control', 'private, max-age=3600');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  createReadStream(file).pipe(response);
 }
 
 function extension(name: string): string {

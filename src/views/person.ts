@@ -15,7 +15,7 @@ import {
   type UnionStatus,
 } from '../parser/types';
 import { bubble, tile } from '../ui/tile';
-import { ageOf, hasBirthday, longDate, parseDate, shortName, today, year, yearsBetween } from '../ui/format';
+import { ageOf, displayName, hasBirthday, longDate, parseDate, shortName, today, year, yearsBetween } from '../ui/format';
 import { icon, weddingRings, RINGS, type IconName } from '../ui/icons';
 import { openLightbox } from '../ui/lightbox';
 
@@ -178,13 +178,10 @@ function focusCard(
 
   const name = document.createElement('h1');
   name.className = 'focus-name';
-  name.textContent = person.name;
+  name.textContent = displayName(person);
   card.append(name);
   if (relation) card.append(line('focus-relation', relation));
 
-  if (person.nick && person.nick !== shortName(person)) {
-    card.append(line('focus-nick', lang() === 'de' ? `„${person.nick}“` : `“${person.nick}”`));
-  }
   if (person.maiden) card.append(line('focus-maiden', t().nee(person.maiden)));
   if (person.job) card.append(line('focus-job', person.job));
 

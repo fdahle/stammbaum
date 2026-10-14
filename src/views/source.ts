@@ -5,7 +5,7 @@ import { icon } from '../ui/icons';
  * family.md as it is, to read along — numbered, so the line a warning names
  * is easy to find — and to take away as a file.
  */
-export function renderSource(markdown: string): HTMLElement {
+export function renderSource(markdown: string, tidy?: () => void): HTMLElement {
   const root = document.createElement('article');
   root.className = 'page-view source-view';
   const heading = document.createElement('h1');
@@ -41,6 +41,16 @@ export function renderSource(markdown: string): HTMLElement {
       );
     });
     actions.append(copy);
+  }
+  // Put in order: generations, households, aligned — only for whoever may edit.
+  if (tidy && markdown.trim() !== '') {
+    const order = document.createElement('button');
+    order.type = 'button';
+    order.className = 'btn btn-sm btn-soft btn-primary';
+    order.title = t().tidyHint;
+    order.append(icon('checklist'), t().tidy);
+    order.addEventListener('click', tidy);
+    actions.append(order);
   }
   root.append(heading, intro, actions);
 

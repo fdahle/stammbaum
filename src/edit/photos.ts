@@ -71,3 +71,31 @@ export function photoChanges(person: Person, names: string[]): { set: Changes<Pe
   }
   return { set, was };
 }
+
+/** Size of the small version bubbles show: sharp at twice the size of the largest bubble. */
+const THUMB_SIDE = 256;
+
+/**
+ * The middle square of a picture at THUMB_SIDE, as a JPEG — what a round
+ * bubble shows of it. Made here so the server needs no image library;
+ * `undefined` when the browser cannot draw the picture.
+ */
+export async function makeThumb(image: Blob): Promise<Blob | undefined> {
+  try {
+    const bitmap = await createImageBitmap(image, { imageOrientation: 'from-image' });
+    const side = Math.min(bitmap.width, bitmap.height);
+    const out = Math.min(THUMB_SIDE, side);
+    const canvas = document.createElement('canvas');
+    canvas.width = out;
+    canvas.height = out;
+    const context = canvas.getContext('2d');
+    if (!context) return undefined;
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, out, out);
+    context.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, out, out);
+    bitmap.close();
+    return (await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}

@@ -301,7 +301,7 @@ function average(values: number[]): number {
  *   instead of up on the first row: someone's in-laws belong over them, not
  *   at the top of the page with a line running down past everyone between.
  */
-function assignGenerations(graph: FamilyGraph): Map<string, number> {
+export function assignGenerations(graph: FamilyGraph): Map<string, number> {
   const generation = new Map<string, number>();
   for (const id of graph.people.keys()) generation.set(id, 0);
   const gen = (id: string) => generation.get(id) ?? 0;

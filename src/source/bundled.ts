@@ -19,6 +19,7 @@ export async function loadSource(): Promise<FamilySource> {
   return {
     markdown: familyMarkdown,
     photos: new Map(Object.entries(photos).map(([path, url]) => [path.split('/').pop()!.toLowerCase(), url])),
+    thumbs: new Map(),
     version: __FAMILY_COMMIT__ || 'bundled',
     stamp: { commit: __FAMILY_COMMIT__ },
     editable: false,
@@ -30,6 +31,10 @@ export async function fetchChanges(): Promise<FamilySource | undefined> {
 }
 
 export async function saveEdits(_edits: Edit[], _message: string): Promise<Saved> {
+  throw new Error('this copy of the family cannot be changed');
+}
+
+export async function uploadThumb(_photo: string, _image: Blob): Promise<void> {
   throw new Error('this copy of the family cannot be changed');
 }
 

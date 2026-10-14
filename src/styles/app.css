@@ -1038,6 +1038,22 @@
     list-style: none;
   }
 
+  /* Two entries of maybe one person, and the button that makes them one. */
+  .gap-double {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0 8px;
+  }
+
+  .gap-double + .gap-double {
+    border-top: 1px solid var(--color-base-300);
+  }
+
+  .gap-double .btn {
+    align-self: flex-end;
+  }
+
   .gap-row {
     display: flex;
     align-items: center;

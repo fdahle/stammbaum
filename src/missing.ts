@@ -90,3 +90,39 @@ function mainBranch(family: Family): Set<string> {
   }
   return biggest;
 }
+
+/**
+ * Pairs that are most likely the same person entered twice: the same name —
+ * or one's birth name with the other's first name — and nothing that tells
+ * them apart: no different sex, no different year of birth, and not already
+ * each other's parent, child or partner.
+ */
+export function duplicates(family: Family): Array<[Person, Person]> {
+  const fold = (text: string) =>
+    text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const names = (person: Person): string[] => {
+    const full = fold(person.name);
+    const first = full.split(' ')[0];
+    return person.maiden && first ? [full, `${first} ${fold(person.maiden)}`] : [full];
+  };
+  const year = (person: Person) => parseDate(person.born)?.y;
+  const related = (a: Person, b: Person) =>
+    [...family.parents(a.id), ...family.children(a.id), ...family.partnerships(a.id).flatMap((p) => (p.partner ? [p.partner] : []))].some(
+      (other) => other.id === b.id,
+    );
+
+  const people = family.people().filter((person) => !isStandIn(person) && !person.stub);
+  const pairs: Array<[Person, Person]> = [];
+  for (let i = 0; i < people.length; i++) {
+    for (let j = i + 1; j < people.length; j++) {
+      const a = people[i]!;
+      const b = people[j]!;
+      if (!names(a).some((name) => names(b).includes(name))) continue;
+      if (a.sex && b.sex && a.sex !== b.sex) continue;
+      if (year(a) && year(b) && year(a) !== year(b)) continue;
+      if (related(a, b)) continue;
+      pairs.push([a, b]);
+    }
+  }
+  return pairs;
+}

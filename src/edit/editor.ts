@@ -76,7 +76,6 @@ function personForm(person: Person | undefined, short = false): PersonForm {
     rest.country = countryField(fields.country, person?.country);
     rest.nationality = countryField(fields.nationality, person?.nationality, { multiple: true, hint: t().nationalityHint });
     rest.note = textField(fields.note, person?.note, { multiline: true });
-    rest.login = textField(fields.login, person?.login, { hint: t().loginHint });
     element.append(
       pair(rest.birthplace, rest.birthcountry),
       rest.nick.element,
@@ -87,7 +86,6 @@ function personForm(person: Person | undefined, short = false): PersonForm {
       pair(rest.lives, rest.country),
       rest.nationality.element,
       rest.note.element,
-      rest.login.element,
     );
   }
 
@@ -338,14 +336,10 @@ async function changePhotos(person: Person, names: string[], context: EditorCont
 
 // ---- someone new ------------------------------------------------------------
 
-/**
- * Someone new, connected to nobody yet — from the menu. `login` fills in the
- * login name ahead: the first person of a new family is usually whoever is
- * starting it.
- */
-export function openNewPerson(context: EditorContext, done: (id: string) => void, login?: string): void {
+/** Someone new, connected to nobody yet — from the menu. */
+export function openNewPerson(context: EditorContext, done: (id: string) => void): void {
   const sheet = openSheet(t().newPerson);
-  const form = personForm(login ? { id: '', name: '', login } : undefined);
+  const form = personForm(undefined);
   const add = button(t().add, 'btn-primary', () => {
     void submit(sheet, add, async () => {
       const values = form.read();
@@ -610,7 +604,6 @@ function partnershipFields(union: Union | undefined) {
       if (startKey === 'married') {
         // A bare `a + b` is a marriage already; it needs no key unless there is a date.
         wanted.married = (start as string | null) ?? (current && (current.married !== undefined || current.together !== undefined) ? undated('married') : null);
-        if (!current) wanted.married ??= '?';
       } else {
         wanted.married = null;
         wanted.together = (start as string | null) ?? undated('together');
@@ -671,6 +664,35 @@ export function confirmUnlink(union: Union, child: Person, context: EditorContex
   confirm(t().unlink, t().unlinkText(child.name, parents), t().unlink, () =>
     context.save([{ kind: 'remove-child', union: union.id, child: child.id }], t().msg.unlinked(child.name, parents)),
   );
+}
+
+/**
+ * Two entries of one person made one: which stays — the one that knows more,
+ * to begin with — and what happens to the other.
+ */
+export function confirmMerge(a: Person, b: Person, context: EditorContext): void {
+  const { family } = context;
+  const weight = (person: Person) =>
+    PERSON_FIELDS.filter((key) => personValue(person, key) !== undefined).length +
+    family.parents(person.id).length + family.children(person.id).length + family.partnerships(person.id).length;
+  const sheet = openSheet(t().merge);
+  const label = (person: Person) => [person.name, person.born && year(person.born)].filter(Boolean).join(' · ');
+  const keep = choiceField(t().mergeKeep, [{ value: a.id, label: label(a) }, { value: b.id, label: label(b) }], weight(b) > weight(a) ? b.id : a.id);
+  const text = document.createElement('p');
+  text.className = 'sheet-text';
+  const paint = () => {
+    const [kept, dropped] = keep.value() === a.id ? [a, b] : [b, a];
+    text.textContent = t().mergeText(kept.name, dropped.name);
+  };
+  keep.onChange(paint);
+  paint();
+  const go = button(t().merge, 'btn-primary', () => {
+    void submit(sheet, go, async () => {
+      const [kept, dropped] = keep.value() === a.id ? [a, b] : [b, a];
+      return !!(await context.save([{ kind: 'merge', keep: kept.id, drop: dropped.id }], t().msg.merged(kept.name)));
+    });
+  });
+  sheet.body.append(keep.element, text, sheetActions(go, button(t().cancel, 'btn-ghost', () => sheet.close())));
 }
 
 export function confirmDelete(person: Person, context: EditorContext): void {

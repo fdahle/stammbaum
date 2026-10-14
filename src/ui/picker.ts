@@ -1,7 +1,7 @@
 import type { Family, SearchOptions } from '../family';
 import { t } from '../i18n';
 import type { Person } from '../parser/types';
-import { lifespan } from './format';
+import { displayName, lifespan } from './format';
 import { iconButton } from './icons';
 import { bubble } from './tile';
 
@@ -87,7 +87,7 @@ export function pickPerson(family: Family, options: PickOptions): Promise<Person
           text.className = 'picker-text';
           const name = document.createElement('span');
           name.className = 'picker-name';
-          name.textContent = person.name;
+          name.textContent = displayName(person);
           const detail = document.createElement('small');
           detail.className = 'picker-detail';
           detail.textContent = [options.caption?.(person), lifespan(person)].filter(Boolean).join(' · ');

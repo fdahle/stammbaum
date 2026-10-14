@@ -1,18 +1,19 @@
 import './styles/app.css';
 
-import { fetchChanges, loadSource, saveEdits, uploadPhoto } from '@source';
+import { fetchChanges, loadSource, saveEdits, uploadPhoto, uploadThumb } from '@source';
 import { upcoming } from './calendar';
-import { photoUrl, readFamily } from './data';
-import { openEditor, openNewPerson, type EditorContext } from './edit/editor';
+import { photosWithoutThumb, photoUrl, readFamily } from './data';
+import { makeThumb } from './edit/photos';
+import { confirmMerge, openEditor, openNewPerson, type EditorContext } from './edit/editor';
 import { Family } from './family';
 import { LANGS, lang, setLang, t } from './i18n';
 import { relation } from './kinship';
-import { gaps } from './missing';
+import { duplicates, gaps } from './missing';
 import type { Person } from './parser/types';
 import type { Edit } from './parser/write';
 import { SaveConflict, type FamilySource } from './source/types';
 import { familyStats } from './stats';
-import { lifespan, shortName, today } from './ui/format';
+import { displayName, lifespan, nameStandIns, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
 import { closeMenu, openMenu } from './ui/menu';
 import { pickPerson } from './ui/picker';
@@ -89,36 +90,12 @@ title.textContent = family.graph.title;
 /** Stored when someone says they are none of the people in the file. */
 const NOBODY = '-';
 
-/**
- * Who the captions are written for: whoever said "this is me" on this device,
- * else the person whose `login=` matches the login in front of the app, else
- * the file's `me` line.
- */
+/** Who the captions are written for: whoever was chosen on this device, else the file's `me` line. */
 function viewer(): string | undefined {
   const chosen = readStored('stammbaum-me');
   if (chosen === NOBODY) return undefined;
   if (chosen && family.person(chosen)) return chosen;
-  return loginViewer() ?? family.graph.me;
-}
-
-/** The person who logged in, when the login in front of the app says so. */
-function loginViewer(): string | undefined {
-  const login = loginName();
-  return login ? family.byLogin(login)?.id : undefined;
-}
-
-/**
- * The reverse proxy can hand over who logged in — see deploy/ — as a cookie,
- * since a static page never sees the request headers.
- */
-function loginName(): string | undefined {
-  const match = /(?:^|;\s*)stammbaum_login=([^;]+)/.exec(document.cookie);
-  if (!match) return undefined;
-  try {
-    return decodeURIComponent(match[1]!);
-  } catch {
-    return match[1];
-  }
+  return family.graph.me;
 }
 
 function setViewer(id: string | null): void {
@@ -139,6 +116,9 @@ function caption(person: Person): string | undefined {
   return captions.get(key);
 }
 
+// A parent nobody has named yet goes by what they are to whoever is looking.
+nameStandIns((person) => caption(person));
+
 /** Search finds people by what they are to you, in either language: "tante", "aunt". */
 function relationWords(person: Person): Array<string | undefined> {
   const me = viewer();
@@ -157,13 +137,13 @@ async function chooseViewer(): Promise<void> {
 }
 
 /**
- * A first visit with no login to go by asks who is looking, rather than
- * quietly captioning everything for the file's `me`. Asked once: closing the
- * sheet keeps the `me` line, and the menu can still change it.
+ * A first visit asks who is looking, rather than quietly captioning
+ * everything for the file's `me`. Asked once: closing the sheet keeps the
+ * `me` line, and the bubble next to search can still change it.
  */
 function welcome(): void {
   if (readStored('stammbaum-me') !== null || readStored('stammbaum-asked') !== null) return;
-  if (loginViewer() || family.people().length < 2) return;
+  if (family.people().length < 2) return;
   writeStored('stammbaum-asked', 'yes');
   void chooseViewer();
 }
@@ -310,7 +290,7 @@ function render(): void {
         }),
       );
       view.scrollTop = 0;
-      document.title = `${person.name} — ${family.graph.title}`;
+      document.title = `${displayName(person)} — ${family.graph.title}`;
       return;
     }
     case 'relation': {
@@ -337,10 +317,21 @@ function render(): void {
     case 'missing':
       // The page lists the file's warnings itself.
       document.querySelector('.warnings')?.remove();
-      showPage(renderMissing(gaps(family, (p) => !!photoUrl(p), today()), family.graph.warnings), t().missing);
+      showPage(
+        renderMissing(
+          gaps(family, (p) => !!photoUrl(p), today()),
+          family.graph.warnings,
+          duplicates(family),
+          source.editable ? (a, b) => confirmMerge(a, b, editorContext()) : undefined,
+        ),
+        t().missing,
+      );
       return;
     case 'file':
-      showPage(renderSource(source.markdown), 'family.md');
+      showPage(
+        renderSource(source.markdown, source.editable ? () => void save([{ kind: 'tidy' }], t().msg.tidied) : undefined),
+        'family.md',
+      );
       return;
     case 'tree':
       if (family.people().length === 0) {
@@ -380,8 +371,7 @@ function render(): void {
 let offeredStart = false;
 
 function startFamily(): void {
-  // Whoever starts the family is likely its first person: their login comes filled in.
-  openNewPerson(editorContext(), showAdded, loginName());
+  openNewPerson(editorContext(), showAdded);
 }
 
 /** The tree before there is anyone in it. */
@@ -536,7 +526,7 @@ searchInput.addEventListener('input', () => {
       button.type = 'button';
       button.className = 'result flex w-full items-baseline justify-between gap-3';
       const name = document.createElement('span');
-      name.textContent = person.name;
+      name.textContent = displayName(person);
       const detail = document.createElement('small');
       detail.className = 'opacity-60 tabular-nums text-right';
       detail.textContent = [caption(person), lifespan(person)].filter(Boolean).join(' · ');
@@ -588,7 +578,7 @@ function paintViewerButton(): void {
   const me = viewer();
   const person = me ? family.person(me) : undefined;
   viewerButton.replaceChildren(person ? bubble(person) : icon('person'));
-  const label = person ? `${t().iAm}: ${person.name} — ${t().changeViewer}` : t().whoAreYou;
+  const label = person ? `${t().iAm}: ${displayName(person)} — ${t().changeViewer}` : t().whoAreYou;
   viewerButton.title = label;
   viewerButton.setAttribute('aria-label', label);
 }
@@ -653,6 +643,9 @@ function renderMenu(): void {
         lang(),
         (id) => {
           setLang(id);
+          // The tree's words — stand-ins' among them — are drawn in when it is built.
+          tree = makeTree();
+          subtrees.clear();
           refresh();
         },
       ),
@@ -731,7 +724,11 @@ function editorContext(): EditorContext {
 async function upload(image: Blob, name: string): Promise<string | undefined> {
   toast(t().uploading, 'info');
   try {
-    return await uploadPhoto(image, name);
+    const saved = await uploadPhoto(image, name);
+    // The small version for the bubbles goes along; without it they show the big one.
+    const thumb = await makeThumb(image);
+    if (thumb) await uploadThumb(saved, thumb).catch((error: unknown) => console.error(error));
+    return saved;
   } catch (error) {
     console.error(error);
     toast(t().uploadError);
@@ -973,6 +970,26 @@ if (family.graph.warnings.length > 0) {
 localize();
 welcome();
 render();
+
+/**
+ * Photos from before there were small versions — or put into photos/ by
+ * hand — get theirs from the first editor who comes by, one at a time and
+ * in the background. The bubbles use them from the next visit on.
+ */
+async function fillThumbs(): Promise<void> {
+  if (!source.editable) return;
+  for (const name of photosWithoutThumb()) {
+    const url = source.photos.get(name);
+    if (!url) continue;
+    try {
+      const thumb = await makeThumb(await (await fetch(url)).blob());
+      if (thumb) await uploadThumb(name, thumb);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+}
+setTimeout(() => void fillThumbs(), 4000);
 
 function must<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);

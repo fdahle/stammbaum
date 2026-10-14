@@ -93,11 +93,11 @@ is logged in.
 
 ## Editing in the app
 
-Behind the login, every card has **Bearbeiten**: the person's details as a form
+Behind the login, every card has a pen in its corner: the person's details as a form
 — dates as day, month and year, where the year alone is enough — then their
 parents, partners and children, each with what can be done about them, and
-**+ Elternteil**, **+ Partner/in**, **+ Kind** to add someone new or someone
-already in the tree. The menu adds people connected to nobody yet. A
+**+ Elternteil**, **+ Partner/in**, **+ Kind**, **+ Geschwister** to add someone
+new or someone already in the tree. The menu adds people connected to nobody yet. A
 partnership is edited from its row: married or together, since when, and
 whether and when it ended.
 
@@ -106,25 +106,45 @@ menu for what is under it:
 
 | On | |
 | --- | --- |
-| A person | Open, edit, add a parent, partner or child, add a photo, delete |
+| A person | Open, edit, **Hinzufügen ▸** a parent, partner, child, sibling or photo, delete |
 | A line between people | Edit that partnership, add a child to the couple, unlink one of their children |
 | Empty space | Add someone new, show the whole tree |
 
-A family file that is still empty starts with the first person — whoever is
-logged in, with their login filled in.
+A family file that is still empty starts with the first person.
+
+Relatives find their place: a second parent takes the brothers and sisters
+along, a new partner can become the other parent of someone's children, and a
+child of a couple is no longer also listed under one of them alone. Siblings
+share parents — when there are none yet, a stand-in *Mutter von …* and *Vater
+von …* come along, drawn as a dashed "?" and named from whoever is looking
+(*Urgroßmutter · unbekannt*) until someone knows who they were.
 
 **Photos** come from the phone or computer: on the edit sheet, or from the menu
 on a person. The browser turns each one upright and shrinks it to 1600 pixels
 across — which also drops what the camera wrote into it, such as where it was
 taken — and the server keeps it in `photos/` as `klaus.jpg`, `klaus-2.jpg`.
 The first becomes the portrait, the rest the gallery; the sheet can make
-another one the portrait or take one out again (the file stays in `photos/`).
+another one the portrait, choose the circle the bubble shows, or take one out
+again (the file stays in `photos/`). Each photo also gets a small version for
+the bubbles, made by the browser — `photos/.thumbs/` — so a tree with hundreds
+of photos stays quick; photos from before, or put in by hand, get theirs the
+next time someone who may edit opens the app.
 SVG is not taken, since it could carry script. Uploads are logged in
 `changes.log` like edits; the proxy in front has to let bodies of a few
 megabytes through (`client_max_body_size` in [`deploy/`](deploy/)).
 
 The menu's **Die Datei family.md** shows the file as it is, line by line, to
-download or copy.
+download or copy — and **Datei ordnen** puts it in order: a section per
+generation, each household together (the couple, then the line about them),
+person lines aligned, a bare `married=?` dropped since `a + b` says the same,
+and ids the app made in an earlier form given today's. Nothing is lost —
+comments go along with the line below them, prose around the block stays — and
+a file in order stays in order: every save after that puts new lines where they
+belong. A file kept in an order of its own is left alone.
+
+**Was fehlt noch?** also lists people who look entered twice — the same name,
+or a birth name, and no different sex or year of birth — and makes two such
+entries one: the details joined, every link moved over.
 
 Every change is written straight into `family.md`, and only where it belongs:
 one word in a person's line, one name added to a `->` list, a new `person` line
@@ -133,7 +153,7 @@ stay as they were, so the file reads as if written by hand — and can still be
 edited by hand.
 
 Before each save the server puts the previous `family.md` into
-`data/history/`, named by the time, and adds a line to
+`data/history/`, named by the time — the newest 50 are kept — and adds a line to
 `data/history/changes.log` saying who changed what:
 
 ```
@@ -207,7 +227,7 @@ nina + david together=2012 separated=2018
 | `%% …` | Comment. |
 
 **Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`,
-`birthplace`, `deathplace`, `job`, `lives`, `photos`, `login`, `birthcountry`,
+`birthplace`, `deathplace`, `job`, `lives`, `photos`, `birthcountry`,
 `deathcountry`, `country`, `nationality`.
 **Partnership keys** — `married`, `divorced`, `together`, `separated`,
 `children`, `adopted`.
@@ -226,10 +246,11 @@ Notes:
   for people: `died=?` marks someone as dead without a date (*1931 – †*).
 - Dates are free text, but `1956`, `1956-04` and `1956-04-02` are formatted
   nicely (`* 2. April 1956`); anything else is printed as written.
-- Ids are the deep-link handles — `#/p/klaus` opens Klaus directly — so keep
-  them short, lowercase and stable.
-- `nick` wins over the first name in bubbles: the tree says *Oma*, the detail
-  view says *Elisabeth Bauer*.
+- Ids are the deep-link handles — `#/p/klaus-bauer` opens Klaus directly. The
+  app makes them from the whole name, with the year of birth when two share
+  it, then a number: `klaus-bauer`, `klaus-bauer-1958`, `klaus-bauer-2`.
+- `nick` wins over the first name in bubbles: the tree says *Oma*, the card
+  says *Elisabeth (Oma) Bauer*.
 - Every person in the detail view is captioned with what they are to whoever
   is looking — see [Who is looking](#who-is-looking): *Tante*, *Cousine 2.
   Grades*, *Schwager*, *Mann der Cousine*, or in English *Aunt*, *Second
@@ -255,9 +276,9 @@ Notes:
   from whatever is typed ("Norwegen", "Norway", "no"); a country that no
   longer is one, such as `birthcountry=DDR`, stays as written. The numbers
   page lists the countries the family was born in and lives in today.
-- A person whose id the app made from their name — `klaus` for *Klaus Bauer* —
+- A person whose id the app made from their name — `klaus-bauer` for *Klaus Bauer* —
   gets a new one when renamed in the app: a stand-in *Mutter von Felix* named
-  *Birgit Dahle* becomes `birgit` everywhere in the file. Ids written by hand
+  *Birgit Dahle* becomes `birgit-dahle` everywhere in the file. Ids written by hand
   stay as they are.
 - `adopted=<child>, …` lists children of a partnership who were adopted. They
   count as children everywhere — no `->` needed — and their card says so. A
@@ -274,8 +295,6 @@ Notes:
   `photos=a.jpg, b.jpg` adds more pictures; the card shows them as a gallery,
   and tapping the portrait opens them full screen, where a pinch, a double tap
   or the mouse wheel zooms in.
-- `login` is the person's user name at the login in front of the app — see
-  [Who is looking](#who-is-looking).
 - Undeclared ids still render, and the app shows a dismissible list of hints
   about the file — a half-finished tree never breaks the page. The hints also
   catch what parses but cannot be true: a person declared twice, a missing
@@ -284,24 +303,17 @@ Notes:
 
 ## Who is looking
 
-The captions are written for one person, the viewer. The app picks them in
-this order:
-
-1. Whoever tapped **Das bin ich** on their card, or chose themselves under
-   **Ich bin** in the menu — remembered on that phone.
-2. The person whose `login=` matches who logged in, when the app runs behind
-   a login such as Authelia. A static page never sees request headers, so the
-   reverse proxy passes the user name on as a `stammbaum_login` cookie — see
-   [`deploy/nginx-stammbaum.conf`](deploy/nginx-stammbaum.conf).
-3. The file's `me` line.
-
-With neither of the first two, the first visit asks **Wer bist du?** rather
-than quietly captioning everything for the file's `me` — which matters for the
-single file mailed around, where everyone would otherwise read the author's
-captions as their own. Closing the question keeps the `me` line, and every
-person card says whose view its captions are written from (*aus Sicht von
-Jonas*), with a tap to change it. "Niemand davon" in the picker turns the
+The captions are written for one person, the viewer: whoever was chosen with
+the bubble next to search — remembered on that phone — or else the file's
+`me` line. That bubble is the one place to change it. A first visit asks
+**Wer bist du?** rather than quietly captioning everything for the file's
+`me` — which matters for the single file mailed around, where everyone would
+otherwise read the author's captions as their own. "Niemand davon" turns the
 captions off on that phone.
+
+At the bottom of the tree, **Nur meine Familie** leaves out everyone who is
+not related to the viewer by blood or married to someone who is: one's
+cousins stay, a partner's family goes.
 
 So `me` is a default, not the shape of the file: the file itself describes the
 family from nobody's point of view, and works just as well without a `me`
