@@ -84,7 +84,8 @@ export function layoutFamily(graph: FamilyGraph): Layout {
     } else {
       row.push(id, ...spouses.slice(unions.length >= 2 ? 1 : 0));
     }
-    const rowIds = row.filter((r): r is string => r !== undefined && (r === id || !nodes.has(r)));
+    // A couple married twice names the same partner twice; they get one bubble.
+    const rowIds = [...new Set(row.filter((r): r is string => r !== undefined && (r === id || !nodes.has(r))))];
 
     // Children first: they decide how wide this cluster is.
     const groups: Array<{ union: Union; ids: string[]; min: number; max: number }> = [];

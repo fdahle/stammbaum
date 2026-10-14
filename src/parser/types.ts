@@ -37,7 +37,11 @@ export function isDeceased(person: Person): boolean {
 
 export type Sex = 'm' | 'f';
 
-/** A partnership. Divorce and remarriage are modelled as separate unions. */
+/**
+ * A partnership. Divorce and remarriage are modelled as separate unions — even
+ * when the same two people marry again, which gives the second one an id of
+ * `a+b~2`.
+ */
 export interface Union {
   id: string;
   /** One or two people. A single partner means "other parent unknown". */

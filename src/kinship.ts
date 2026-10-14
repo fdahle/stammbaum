@@ -41,9 +41,12 @@ function blood(family: Family, from: string, to: string): Blood | undefined {
     if (down === undefined || (best && best.up + best.down <= up + down)) continue;
     best = { up, down, half: false };
   }
-  // Siblings from different partnerships share one parent, not both.
+  // Half siblings share one parent, not both — by who the parents are, not by
+  // partnership: a couple who married each other twice has two.
   if (best?.up === 1 && best.down === 1) {
-    best.half = family.parentUnion(from) !== family.parentUnion(to);
+    const mine = family.parents(from).map((p) => p.id);
+    const theirs = new Set(family.parents(to).map((p) => p.id));
+    best.half = mine.length !== theirs.size || mine.some((id) => !theirs.has(id));
   }
   return best;
 }
@@ -90,7 +93,10 @@ function relativeOfPartner(family: Family, from: string, to: Person, words: Lexi
   return words.of(words.blood(kin), to, words.partner[status], partner);
 }
 
-/** The partnership whose partner is the nearest blood relative. */
+/**
+ * The partnership whose partner is the nearest blood relative. On a tie the
+ * later one wins — the one that lasts, when a couple married twice.
+ */
 function closest(
   partnerships: ReturnType<Family['partnerships']>,
   kinOf: (partner: Person) => Blood | undefined,
@@ -98,7 +104,7 @@ function closest(
   let best: { kin: Blood; partner: Person; status: UnionStatus } | undefined;
   for (const { union, partner } of partnerships) {
     const kin = partner && kinOf(partner);
-    if (!partner || !kin || (best && best.kin.up + best.kin.down <= kin.up + kin.down)) continue;
+    if (!partner || !kin || (best && best.kin.up + best.kin.down < kin.up + kin.down)) continue;
     best = { kin, partner, status: unionStatus(union) };
   }
   return best;

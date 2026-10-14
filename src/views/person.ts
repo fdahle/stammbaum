@@ -73,16 +73,25 @@ export function renderPerson(family: Family, person: Person, context: PersonCont
   focusTier.append(left, card, right);
   root.append(focusTier);
 
+  // Someone married to the same person twice gets one tile with both pills.
+  const byPartner = new Map<string, { partner: Person; unions: Union[] }>();
+  for (const { union, partner } of partnerships) {
+    if (!partner) continue;
+    const entry = byPartner.get(partner.id) ?? { partner, unions: [] };
+    entry.unions.push(union);
+    byPartner.set(partner.id, entry);
+  }
+  /** Keyed by union, so a couple married twice shares one element under both ids. */
   const partnerTiles = new Map<string, HTMLElement>();
-  partnerships.forEach(({ union, partner }, index) => {
-    if (!partner) return;
+  [...byPartner.values()].forEach(({ partner, unions }, index) => {
     const element = document.createElement('div');
     element.className = 'partner';
-    // The connector is drawn later, from the geometry — it reads the state here.
-    element.dataset.status = unionStatus(union);
-    element.append(tile(partner, kin(partner)), relationPill(union));
-    partnerTiles.set(union.id, element);
-    (index === 0 && partnerships.length > 1 ? left : right).append(element);
+    // The connector is drawn later, from the geometry — it reads the state of
+    // the latest partnership here.
+    element.dataset.status = unionStatus(unions[unions.length - 1]!);
+    element.append(tile(partner, kin(partner)), ...unions.map(relationPill));
+    for (const union of unions) partnerTiles.set(union.id, element);
+    (index === 0 && byPartner.size > 1 ? left : right).append(element);
   });
   // Narrow screens drop the partners below the card; the CSS needs to know
   // which side is actually occupied to keep a single partner centred.
@@ -352,11 +361,15 @@ function drawWires(
 
   // A partner sits beside the card on a wide screen and below it on a phone.
   const partnerGeometry = new Map<string, { bubble: ReturnType<typeof box>; outer: ReturnType<typeof box>; below: boolean }>();
+  const wired = new Set<HTMLElement>();
   for (const [unionId, element] of partners) {
     const bubble = bubbleOf(element);
     const outer = box(element);
     const below = bubble.top > card.bottom - 4;
     partnerGeometry.set(unionId, { bubble, outer, below });
+    // One wire per partner, however often the two married.
+    if (wired.has(element)) continue;
+    wired.add(element);
 
     const status = element.dataset.status ?? 'married';
     const kind = `wire wire-${status}`;

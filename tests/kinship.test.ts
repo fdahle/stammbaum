@@ -203,5 +203,22 @@ bfmama -> bfrau, bfs
     expect(relation(patchwork, 'ich', 'schwipp', 'en')).toBe('Sister-in-law');
   });
 
+  it('calls someone who married their ex again a spouse, not an ex', () => {
+    const twice = new Family(
+      parseFamily('```family\nperson a "A" sex=f\nperson b "B" sex=m\na + b married=1980 divorced=1985\na + b married=1990\n```'),
+    );
+    expect(relation(twice, 'a', 'b')).toBe('Ehemann');
+  });
 });
 
+describe('a couple who married each other twice', () => {
+  const twice = new Family(
+    parseFamily(
+      '```family\nperson c "C" sex=f\nperson d "D" sex=m\na + b married=1970 divorced=1975 -> c\na + b married=1980 -> d\n```',
+    ),
+  );
+
+  it('have full siblings, not half ones, across both marriages', () => {
+    expect(relation(twice, 'c', 'd')).toBe('Bruder');
+  });
+});

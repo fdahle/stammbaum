@@ -177,3 +177,16 @@ describe('mistakes in the file', () => {
   });
 });
 
+describe('remarriage to the same person', () => {
+  it('gives a couple who married each other again a second partnership', () => {
+    const graph = block('a + b married=1980 divorced=1985 -> c\na + b married=1990 -> d\nb + a -> e');
+    expect(graph.unions.map((u) => [u.id, u.married, u.divorced, u.children])).toEqual([
+      ['a+b', '1980', '1985', ['c']],
+      ['a+b~2', '1990', undefined, ['d', 'e']],
+    ]);
+  });
+
+  it('still merges an end written on a line of its own', () => {
+    expect(block('a + b married=1980\na + b divorced=1985').unions).toHaveLength(1);
+  });
+});

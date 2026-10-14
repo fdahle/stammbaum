@@ -52,11 +52,6 @@ export class Family {
     return this.people().find((p) => p.login?.toLowerCase() === wanted);
   }
 
-  /** The partnership someone was born into. */
-  parentUnion(id: string): Union | undefined {
-    return this.unionsByChild.get(id)?.[0];
-  }
-
   /** Birth parents and adoptive parents, when the file has both. */
   parents(id: string): Person[] {
     const ids = (this.unionsByChild.get(id) ?? []).flatMap((union) => union.partners);
@@ -72,15 +67,21 @@ export class Family {
     return (this.unionsByChild.get(id) ?? []).some((union) => union.adopted?.includes(id));
   }
 
-  /** Children grouped by the partnership they came from. */
+  /**
+   * Children grouped by the other parent — one group for a couple who married
+   * each other twice, under their latest partnership.
+   */
   broods(id: string): Array<{ union: Union; partner: Person | undefined; children: Person[] }> {
-    return this.partnerships(id)
-      .map(({ union, partner }) => ({
-        union,
-        partner,
-        children: union.children.map((c) => this.person(c)).filter(isPerson),
-      }))
-      .filter((brood) => brood.children.length > 0);
+    const byPartner = new Map<string, { union: Union; partner: Person | undefined; children: Person[] }>();
+    for (const { union, partner } of this.partnerships(id)) {
+      const key = partner?.id ?? '';
+      const children = [...(byPartner.get(key)?.children ?? [])];
+      for (const child of union.children.map((c) => this.person(c)).filter(isPerson)) {
+        if (!children.includes(child)) children.push(child);
+      }
+      byPartner.set(key, { union, partner, children });
+    }
+    return [...byPartner.values()].filter((brood) => brood.children.length > 0);
   }
 
   /**

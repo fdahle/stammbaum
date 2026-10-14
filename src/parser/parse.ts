@@ -19,7 +19,7 @@ import { type Diagnostic, type FamilyGraph, type Person, type Sex, type Union, u
  */
 export function parseFamily(markdown: string): FamilyGraph {
   const people = new Map<string, Person>();
-  const unions = new Map<string, Union>();
+  const unions = new Unions();
   const warnings: Diagnostic[] = [];
 
   const graph: FamilyGraph = {
@@ -55,7 +55,7 @@ export function parseFamily(markdown: string): FamilyGraph {
 
   // Anyone mentioned only in a relation still gets a bubble, so a half-finished
   // file renders instead of blowing up.
-  for (const union of unions.values()) {
+  for (const union of unions.all()) {
     for (const id of [...union.partners, ...union.children]) {
       if (!people.has(id)) {
         people.set(id, { id, name: id, stub: true });
@@ -67,9 +67,42 @@ export function parseFamily(markdown: string): FamilyGraph {
   if (me && people.has(me.id)) graph.me = me.id;
   else if (me) warnings.push({ line: me.line, message: `"me" names unknown person "${me.id}"`, text: me.text });
 
-  graph.unions = [...unions.values()];
+  graph.unions = unions.all();
   check(graph);
   return graph;
+}
+
+/**
+ * The partnerships read so far. A couple who divorce and marry each other again
+ * have two partnerships, like any remarriage; every other statement about the
+ * same two people merges into the one they are in now.
+ */
+class Unions {
+  private readonly byId = new Map<string, Union>();
+  private readonly current = new Map<string, Union>();
+
+  /** The partnership a statement is about — a new one when `begins` starts it afresh. */
+  get(partners: string[], begins: boolean): Union {
+    const pair = unionId(partners);
+    const existing = this.current.get(pair);
+    if (existing && !(begins && isOver(existing))) return existing;
+    const count = this.all().filter((u) => unionId(u.partners) === pair).length;
+    const union: Union = { id: count === 0 ? pair : `${pair}~${count + 1}`, partners, children: [] };
+    this.byId.set(union.id, union);
+    this.current.set(pair, union);
+    return union;
+  }
+
+  all(): Union[] {
+    return [...this.byId.values()];
+  }
+}
+
+/** Began and ended — so another `married=` or `together=` means they began again. */
+function isOver(union: Union): boolean {
+  const began = union.married !== undefined || union.together !== undefined;
+  const ended = union.divorced !== undefined || union.separated !== undefined;
+  return began && ended;
 }
 
 interface Token {
@@ -149,7 +182,7 @@ function readPerson(tokens: Token[], line: number, people: Map<string, Person>, 
   }
 }
 
-function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: string) => void): void {
+function readRelation(tokens: Token[], unions: Unions, warn: (m: string) => void): void {
   const arrow = tokens.findIndex((t) => !t.quoted && t.value === '->');
   const left = arrow === -1 ? tokens : tokens.slice(0, arrow);
   let right = arrow === -1 ? [] : tokens.slice(arrow + 1);
@@ -179,9 +212,8 @@ function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: str
     return;
   }
 
-  const id = unionId(partners);
-  const union: Union = unions.get(id) ?? { id, partners, children: [] };
-  unions.set(id, union);
+  const pairs = attributes([...rest, ...after], warn);
+  const union = unions.get(partners, pairs.some(([key]) => key === 'married' || key === 'together'));
 
   const children = right
     .map((t) => t.value)
@@ -190,7 +222,7 @@ function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: str
     .map((c) => c.trim())
     .filter((c) => c !== '');
 
-  for (const [key, value] of attributes([...rest, ...after], warn)) {
+  for (const [key, value] of pairs) {
     if (!UNION_KEYS.has(key)) {
       warn(`unknown relation attribute "${key}"`);
       continue;

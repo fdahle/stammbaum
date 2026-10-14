@@ -54,3 +54,12 @@ describe('layoutFamily', () => {
     for (const [id, node] of layout.nodes) expect(again.nodes.get(id)!.x).toBe(node.x);
   });
 });
+
+describe('a couple who married twice', () => {
+  it('get one bubble each, side by side', () => {
+    const twice = layoutFamily(parseFamily('```family\na + b married=1980 divorced=1985 -> c\na + b married=1990 -> d\n```'));
+    expect(twice.nodes.size).toBe(4);
+    const [a, b] = ['a', 'b'].map((id) => twice.nodes.get(id)!);
+    expect(Math.abs(a!.x - b!.x)).toBeGreaterThanOrEqual(METRICS.nodeWidth);
+  });
+});

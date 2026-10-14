@@ -125,3 +125,10 @@ describe('German spellings', () => {
     }
   });
 });
+
+describe('a couple who married each other twice', () => {
+  it('have their children in one group', () => {
+    const twice = new Family(parseFamily('```family\na + b married=1970 divorced=1975 -> c\na + b married=1980 -> d\n```'));
+    expect(twice.broods('a').map((b) => [b.union.id, b.children.map((c) => c.id)])).toEqual([['a+b~2', ['c', 'd']]]);
+  });
+});

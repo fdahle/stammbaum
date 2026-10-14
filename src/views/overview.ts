@@ -437,6 +437,13 @@ export class OverviewView {
   private drawLinks(): SVGGElement {
     const group = svgEl('g', { class: 'links' });
     const lanes = assignLanes(this.layout);
+    // A couple who married twice share one line, drawn for the latest marriage
+    // and labelled with both.
+    const couples = new Map<string, UnionEdge[]>();
+    for (const union of this.layout.unions) {
+      const key = [...union.partners].sort().join('+');
+      couples.set(key, [...(couples.get(key) ?? []), union]);
+    }
 
     for (const union of this.layout.unions) {
       const partners = union.partners
@@ -444,11 +451,13 @@ export class OverviewView {
         .filter((n): n is NodeBox => !!n)
         .sort((a, b) => a.x - b.x);
 
-      const state = unionStatus(union);
+      const couple = couples.get([...union.partners].sort().join('+'))!;
+      const latest = couple[couple.length - 1]!;
+      const state = unionStatus(latest);
       const [left, right] = partners;
       // Only a real couple gets the rings; a lone parent has no line to hang on.
       const rings = state === 'married' && !!left && !!right;
-      if (left && right) {
+      if (left && right && union === latest) {
         const cls = `link link-${state}`;
         const x1 = left.x + METRICS.bubbleRadius;
         const x2 = right.x - METRICS.bubbleRadius;
@@ -461,7 +470,7 @@ export class OverviewView {
         } else {
           group.append(svgEl('line', { class: cls, x1, y1: left.y, x2, y2: right.y }));
         }
-        const label = unionLabel(union);
+        const label = couple.map(unionLabel).filter(Boolean).join(' · ');
         if (label) {
           const text = svgEl('text', {
             class: 'union-label',
