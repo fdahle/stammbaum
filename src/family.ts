@@ -1,5 +1,6 @@
 import { countryList, countryName } from './countries';
 import { LANGS } from './i18n';
+import { placeNames } from './places';
 import type { FamilyGraph, Person, Union } from './parser/types';
 
 export interface Partnership {
@@ -113,6 +114,23 @@ export class Family {
 
   // ---- subtrees -----------------------------------------------------------
 
+  /**
+   * `id`'s own family: everyone they share an ancestor with — parents,
+   * brothers and sisters, aunts, cousins, grandparents and so on down — and
+   * those people's partners. A partner's own family stays out.
+   */
+  kinGraph(id: string): FamilyGraph {
+    const ancestors = new Set([id]);
+    for (const current of ancestors) for (const parent of this.parents(current)) ancestors.add(parent.id);
+    const blood = new Set(ancestors);
+    for (const current of blood) for (const child of this.children(current)) blood.add(child.id);
+    const ids = new Set(blood);
+    for (const current of blood) {
+      for (const { partner } of this.partnerships(current)) if (partner) ids.add(partner.id);
+    }
+    return this.subgraph(ids, (union) => union.partners.some((p) => blood.has(p)));
+  }
+
   /** `id`, everyone above them, and the partnerships those people form. */
   ancestorsGraph(id: string): FamilyGraph {
     const ids = new Set([id]);
@@ -202,14 +220,19 @@ function fields(person: Person): Array<string | undefined> {
     person.nick,
     person.maiden,
     person.id,
-    person.lives,
-    person.birthplace,
+    places(person.lives),
+    places(person.birthplace),
     person.job,
     person.born?.slice(0, 4),
-    person.deathplace,
+    places(person.deathplace),
     countries(person),
     person.note,
   ];
+}
+
+/** A place by every name it goes by: found as "Nürnberg" and "Nuremberg". */
+function places(place: string | undefined): string | undefined {
+  return place && placeNames(place).join(' ');
 }
 
 /** Every country someone is linked to, by name in each language: found as "Norwegen" and "Norway". */

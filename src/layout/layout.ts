@@ -219,6 +219,9 @@ function refine(nodes: Map<string, NodeBox>, unions: Union[], passes = 24): void
     for (const generation of order) {
       const row = rows.get(generation)!;
       for (const block of blocksOf(row, unions)) {
+        // A block stands shoulder to shoulder, around where it already is.
+        const centre = average(block.map((node) => node.x));
+        block.forEach((node, i) => (node.x = centre + (i - (block.length - 1) / 2) * step));
         const shifts: number[] = [];
         for (const node of block) {
           const above = parentUnion.get(node.id);
@@ -245,16 +248,27 @@ function refine(nodes: Map<string, NodeBox>, unions: Union[], passes = 24): void
   }
 }
 
-/** Splits a row into blocks of married-and-adjacent people that move together. */
+/**
+ * Splits a row into blocks that move together: couples side by side, and a
+ * brother or sister with no family of their own next to the sibling beside
+ * them — so they stay together instead of drifting off towards their parents
+ * when that sibling has married into another family.
+ */
 function blocksOf(row: NodeBox[], unions: Union[]): NodeBox[][] {
   const married = new Set(
     unions.flatMap((u) => (u.partners.length === 2 ? [u.partners.slice().sort().join('+')] : [])),
   );
+  const parentsOf = new Map<string, string>();
+  for (const union of unions) for (const child of union.children) parentsOf.set(child, union.id);
+  const ownFamily = new Set(unions.flatMap((u) => u.partners));
+  const together = (a: string, b: string) =>
+    married.has([a, b].sort().join('+')) ||
+    (parentsOf.get(a) !== undefined && parentsOf.get(a) === parentsOf.get(b) && (!ownFamily.has(a) || !ownFamily.has(b)));
   const blocks: NodeBox[][] = [];
   let current: NodeBox[] = [];
   for (const node of row) {
     const previous = current[current.length - 1];
-    if (previous && married.has([previous.id, node.id].sort().join('+'))) current.push(node);
+    if (previous && together(previous.id, node.id)) current.push(node);
     else {
       if (current.length > 0) blocks.push(current);
       current = [node];

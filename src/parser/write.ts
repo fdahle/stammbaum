@@ -306,7 +306,7 @@ function editPerson(doc: Doc, id: string, set: Changes<PersonField>, was?: Chang
   const graph = doc.graph();
   const others = { ...graph, people: new Map([...graph.people].filter(([other]) => other !== id)) };
   // Someone only named in a relation so far had their id written there by hand.
-  const made = !person.stub && newId(person.name, others) === id;
+  const made = !person.stub && madeFrom(person.name, id);
   const nextId = name && name !== person.name && made ? newId(name, others) : undefined;
 
   const lines = personLines(doc, id);
@@ -434,6 +434,24 @@ function addPerson(doc: Doc, set: Changes<PersonField>, near?: { id: string; sid
  * then first and last name, then a number — `klaus`, `klaus-bauer`, `klaus2`.
  */
 export function newId(name: string, graph: FamilyGraph): string {
+  const words = idWords(name);
+  const first = words[0] || 'person';
+  const free = (id: string) => !graph.people.has(id);
+  if (free(first)) return first;
+  const full = words.join('-');
+  if (words.length > 1 && free(full)) return full;
+  for (let n = 2; ; n++) if (free(`${first}${n}`)) return `${first}${n}`;
+}
+
+/** Whether `id` is one `newId` could have made from `name`, whichever of its forms was free then. */
+function madeFrom(name: string, id: string): boolean {
+  const words = idWords(name);
+  const first = words[0] || 'person';
+  return id === first || id === words.join('-') || (id.startsWith(first) && /^\d+$/.test(id.slice(first.length)));
+}
+
+/** A name as the words an id is made of: "Jürgen Groß" → `juergen`, `gross`. */
+function idWords(name: string): string[] {
   const fold = (word: string) =>
     word
       .toLowerCase()
@@ -444,13 +462,7 @@ export function newId(name: string, graph: FamilyGraph): string {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]/g, '');
-  const words = name.split(/\s+/).map(fold).filter(Boolean);
-  const first = words[0] || 'person';
-  const free = (id: string) => !graph.people.has(id);
-  if (free(first)) return first;
-  const full = words.join('-');
-  if (words.length > 1 && free(full)) return full;
-  for (let n = 2; ; n++) if (free(`${first}${n}`)) return `${first}${n}`;
+  return name.split(/\s+/).map(fold).filter(Boolean);
 }
 
 function deletePerson(doc: Doc, id: string): void {

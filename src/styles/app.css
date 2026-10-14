@@ -15,6 +15,11 @@
   themes: light --default, dark --prefersdark;
 }
 
+/* Flags first: that font has nothing else, so all other text falls through. */
+@theme {
+  --font-sans: 'Twemoji Country Flags', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
 /* Rounder than the daisyUI defaults, closer to how current mobile UIs look. */
 :root,
 [data-theme='light'],
@@ -527,22 +532,25 @@
     color: var(--color-primary);
   }
 
-  .focus-viewer {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: none;
-    font: inherit;
-    font-size: 0.75rem;
-    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
-    cursor: pointer;
+  .focus-card {
+    position: relative;
   }
 
-  .focus-viewer:hover,
-  .focus-viewer:focus-visible {
+  .focus-edit {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  .focus-edit:hover,
+  .focus-edit:focus-visible {
     color: var(--color-primary);
-    text-decoration: underline;
-    outline: none;
+  }
+
+  .focus-edit .icon {
+    width: 18px;
+    height: 18px;
   }
 
   .focus-nick,
@@ -1272,6 +1280,11 @@
     cursor: pointer;
   }
 
+  .viewer-button .bubble-html {
+    --bubble-size: 30px;
+    flex: none;
+  }
+
   .settings-viewer .bubble-html,
   .picker-row .bubble-html {
     --bubble-size: 36px;
@@ -1632,6 +1645,19 @@
 
   .lightbox-next {
     right: 8px;
+  }
+
+  .scope-toggle {
+    position: absolute;
+    left: 16px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    z-index: 2;
+    border-radius: 999px;
+  }
+
+  .scope-toggle .icon {
+    width: 16px;
+    height: 16px;
   }
 
   .fab-fit {

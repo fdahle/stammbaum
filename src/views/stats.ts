@@ -1,4 +1,5 @@
-import { countryName } from '../countries';
+import { countryLabel } from '../countries';
+import { placeName } from '../places';
 import { t } from '../i18n';
 import type { Person } from '../parser/types';
 import type { Stats } from '../stats';
@@ -65,12 +66,12 @@ export function renderStats(stats: Stats): HTMLElement {
     else add(t().statMostChildren, t().childCount(count), t().couplesTied(couples.length));
   }
   // A tie names every winner: "Bauer, Keller, Schmitt — 6-mal".
-  if (stats.birthplace) add(t().statBirthplace, stats.birthplace.values.join(', '), t().times(stats.birthplace.count));
+  if (stats.birthplace) add(t().statBirthplace, stats.birthplace.values.map((p) => placeName(p)).join(', '), t().times(stats.birthplace.count));
   if (stats.birthCountries) {
-    add(t().statBirthCountries, String(stats.birthCountries.length), stats.birthCountries.map((c) => countryName(c)).join(', '));
+    add(t().statBirthCountries, String(stats.birthCountries.length), stats.birthCountries.map((c) => countryLabel(c)).join(', '));
   }
   if (stats.homeCountries) {
-    add(t().statHomeCountries, String(stats.homeCountries.length), stats.homeCountries.map((c) => countryName(c)).join(', '));
+    add(t().statHomeCountries, String(stats.homeCountries.length), stats.homeCountries.map((c) => countryLabel(c)).join(', '));
   }
   if (stats.surname) add(t().statSurname, stats.surname.values.join(', '), t().times(stats.surname.count));
   if (stats.birthMonth) {

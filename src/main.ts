@@ -33,6 +33,10 @@ import { treeMenu } from './views/tree-menu';
  * dark theme is registered with --prefersdark, so it applies on its own when no
  * data-theme attribute is set.
  */
+// Flags next to countries, unless the build left them out (STAMMBAUM_FLAGS=off).
+// A chunk of its own; the font is only fetched where the system draws no flags.
+if (__FLAGS__) void import('./flags');
+
 const MODES = [
   { id: 'system', icon: 'auto' },
   { id: 'light', icon: 'sun' },
@@ -70,7 +74,12 @@ menuButton.append(icon('menu'));
 const menuPanel = document.createElement('div');
 menuPanel.className = 'dropdown-content settings-panel';
 menu.append(menuButton, menuPanel);
-actions.append(backButton, searchToggle, menu);
+// Who is looking, and the one place to change it: their bubble, next to search.
+const viewerButton = document.createElement('button');
+viewerButton.type = 'button';
+viewerButton.className = 'btn btn-ghost btn-circle viewer-button';
+viewerButton.addEventListener('click', () => void chooseViewer());
+actions.append(backButton, searchToggle, viewerButton, menu);
 
 must<HTMLElement>('#crest').append(icon('tree'));
 title.textContent = family.graph.title;
@@ -114,8 +123,9 @@ function loginName(): string | undefined {
 
 function setViewer(id: string | null): void {
   writeStored('stammbaum-me', id ?? NOBODY);
-  // Someone new is looking: the tree opens on them next time it is shown.
-  tree.reframe();
+  // Someone new is looking: the tree is theirs, and opens on them.
+  tree = makeTree();
+  subtrees.delete('all');
   refresh();
 }
 
@@ -213,7 +223,31 @@ function parseRoute(hash: string): Route | undefined {
   return undefined;
 }
 
-let tree = new OverviewView(family, openFromTree, openTreeMenu);
+/**
+ * The whole family, or only whoever is looking's own: everyone they share an
+ * ancestor with, and those people's partners — a partner's family stays out.
+ */
+let scope: 'all' | 'kin' = readStored('stammbaum-scope') === 'kin' ? 'kin' : 'all';
+
+/** The tree for the overview, as wide as `scope` says. */
+function makeTree(): OverviewView {
+  const me = viewer();
+  const shown = scope === 'kin' && me ? new Family(family.kinGraph(me)) : family;
+  return new OverviewView(shown, openFromTree, openTreeMenu);
+}
+
+/** Everyone, whatever the overview shows — a path between two people may run through anybody. */
+function wholeTree(): OverviewView {
+  if (scope === 'all' || !viewer()) return tree;
+  let whole = subtrees.get('all');
+  if (!whole) {
+    whole = new OverviewView(family, openFromTree, openTreeMenu);
+    subtrees.set('all', whole);
+  }
+  return whole;
+}
+
+let tree = makeTree();
 /** Ancestor and descendant trees, built the first time they are asked for. */
 const subtrees = new Map<string, OverviewView>();
 /** The tree on screen, if a tree is on screen. */
@@ -272,8 +306,6 @@ function render(): void {
         renderPerson(family, person, {
           viewer: viewer(),
           pickRelative,
-          setViewer,
-          chooseViewer: () => void chooseViewer(),
           edit: source.editable ? (someone) => openEditor(someone, editorContext()) : undefined,
         }),
       );
@@ -327,8 +359,9 @@ function render(): void {
       return;
     case 'path': {
       const { a, b } = route;
-      showTree(tree, `${shortName(a)} ↔ ${shortName(b)}`, relationRoute(a, b));
-      tree.emphasize(family.path(a.id, b.id));
+      const whole = wholeTree();
+      showTree(whole, `${shortName(a)} ↔ ${shortName(b)}`, relationRoute(a, b));
+      whole.emphasize(family.path(a.id, b.id));
       document.title = `${shortName(a)} ↔ ${shortName(b)} — ${family.graph.title}`;
       return;
     }
@@ -400,11 +433,31 @@ function showTree(overview: OverviewView, label?: string, closeTo = '#/', focus?
     chip.append(text, close);
     overview.element.append(chip);
   }
+  overview.element.querySelector('.scope-toggle')?.remove();
+  if (overview === tree && viewer()) overview.element.append(scopeToggle());
   view.replaceChildren(overview.element);
   overview.markViewer(viewer());
   overview.activate(focus);
   showGestureHint(overview);
   shownTree = overview;
+}
+
+/** Bottom left of the overview: the whole family, or only one's own. */
+function scopeToggle(): HTMLButtonElement {
+  const on = scope === 'kin';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `scope-toggle btn btn-sm shadow-md ${on ? 'btn-primary' : 'bg-base-100'}`;
+  button.setAttribute('aria-pressed', String(on));
+  button.title = t().onlyMyFamilyHint;
+  button.append(icon('family'), t().onlyMyFamily);
+  button.addEventListener('click', () => {
+    scope = on ? 'all' : 'kin';
+    writeStored('stammbaum-scope', scope);
+    tree = makeTree();
+    render();
+  });
+  return button;
 }
 
 window.addEventListener('hashchange', render);
@@ -530,19 +583,17 @@ menu.addEventListener('toggle', () => {
   if (menu.open) renderMenu();
 });
 
-function renderMenu(): void {
+/** The viewer button shows whose eyes the captions are written for, or a blank person when nobody's. */
+function paintViewerButton(): void {
   const me = viewer();
   const person = me ? family.person(me) : undefined;
+  viewerButton.replaceChildren(person ? bubble(person) : icon('person'));
+  const label = person ? `${t().iAm}: ${person.name} — ${t().changeViewer}` : t().whoAreYou;
+  viewerButton.title = label;
+  viewerButton.setAttribute('aria-label', label);
+}
 
-  const who = document.createElement('button');
-  who.type = 'button';
-  who.className = 'settings-viewer';
-  const name = document.createElement('span');
-  name.textContent = person ? person.name : t().nobody;
-  if (person) who.append(bubble(person));
-  who.append(name);
-  who.addEventListener('click', () => void chooseViewer());
-
+function renderMenu(): void {
   // Where to go and what to do: a link where there is a place, a button where
   // something happens.
   const more = document.createElement('div');
@@ -594,7 +645,6 @@ function renderMenu(): void {
 
   const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
   menuPanel.replaceChildren(
-    group(t().iAm, who, hint(t().iAmHint)),
     group(t().more, more),
     group(
       t().language,
@@ -737,7 +787,7 @@ function useSource(next: FamilySource): void {
   family = new Family(readFamily(next));
   title.textContent = family.graph.title;
   const before = tree;
-  tree = new OverviewView(family, openFromTree, openTreeMenu);
+  tree = makeTree();
   // The same family a moment later: stay where one was looking.
   tree.keepViewOf(before);
   subtrees.clear();
@@ -809,6 +859,7 @@ function localize(): void {
   document.querySelector('meta[name="description"]')?.setAttribute('content', t().description);
   searchInput.placeholder = t().searchPlaceholder;
   searchInput.setAttribute('aria-label', t().search);
+  paintViewerButton();
   for (const [element, text] of [
     [backButton, t().back],
     [searchToggle, t().search],

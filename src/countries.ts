@@ -93,3 +93,18 @@ export function countryList(value: string | undefined): string[] {
 export function countryNames(language: Lang = lang()): string[] {
   return CODES.map((code) => countryName(code, language)).filter((name) => name.length > 2).sort((a, b) => a.localeCompare(b, language));
 }
+
+/**
+ * `DE` → 🇩🇪: two regional-indicator letters. Windows draws none of them in
+ * Chrome or Edge, so main.ts loads a small font with just the flags there.
+ */
+export function countryFlag(value: string): string {
+  if (!__FLAGS__ || !KNOWN.has(value)) return '';
+  return String.fromCodePoint(...[...value].map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65));
+}
+
+/** "🇩🇪 Deutschland" — the flag to spot it, the name to be sure; as written for a former country. */
+export function countryLabel(value: string, language: Lang = lang()): string {
+  const flag = countryFlag(value);
+  return flag ? `${flag} ${countryName(value, language)}` : countryName(value, language);
+}

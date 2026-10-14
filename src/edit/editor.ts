@@ -433,26 +433,35 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
     family.graph.unions.filter((u) => u.partners.length === 1 && u.partners[0] === id).flatMap((u) => u.children.map((c) => family.person(c)!).filter(Boolean));
   const loneParent = family.graph.unions.find((u) => u.children.includes(person.id) && u.partners.length === 1);
   if (kind === 'sibling') {
-    // Siblings are children of the same parents: these, or one of them for a half-sibling.
-    const parentUnions = family.graph.unions.filter((u) => u.children.includes(person.id));
-    if (parentUnions.length > 0) {
-      const options = parentUnions.flatMap((union) => [
-        { value: union.partners.join('+'), label: namesOf(family, union.partners) },
-        ...(union.partners.length === 2 ? union.partners.map((id) => ({ value: id, label: t().halfVia(namesOf(family, [id])) })) : []),
-      ]);
-      shared = choiceField(t().sharedParents, options, options[0]!.value);
-      sheet.body.append(shared.element);
-    } else {
-      // No parents yet: they come along, named or as a stand-in to name later.
-      const group = document.createElement('div');
-      group.className = 'form-group';
-      const hint = document.createElement('p');
-      hint.className = 'form-hint';
-      hint.textContent = t().siblingParentsHint(shortName(person));
-      newParents = [textField(t().motherOptional, undefined), textField(t().fatherOptional, undefined)];
-      group.append(hint, ...newParents.map((field) => field.element));
-      sheet.body.append(group);
-    }
+    // Siblings are children of the same parents: these, or one of them for a
+    // half-sibling — whoever of the two already has parents brings them.
+    const box = document.createElement('div');
+    sheet.body.append(box);
+    chosenChanged = () => {
+      shared = undefined;
+      newParents = [];
+      const parentsOf = (id: string) => family.graph.unions.filter((u) => u.children.includes(id));
+      const parentUnions = parentsOf(person.id).length > 0 ? parentsOf(person.id) : existing ? parentsOf(existing.id) : [];
+      if (parentUnions.length > 0) {
+        const options = parentUnions.flatMap((union) => [
+          { value: union.partners.join('+'), label: namesOf(family, union.partners) },
+          ...(union.partners.length === 2 ? union.partners.map((id) => ({ value: id, label: t().halfVia(namesOf(family, [id])) })) : []),
+        ]);
+        shared = choiceField(t().sharedParents, options, options[0]!.value);
+        box.replaceChildren(shared.element);
+      } else {
+        // No parents yet on either side: they come along, named or as stand-ins to name later.
+        const group = document.createElement('div');
+        group.className = 'form-group';
+        const hint = document.createElement('p');
+        hint.className = 'form-hint';
+        hint.textContent = t().siblingParentsHint(shortName(person));
+        newParents = [textField(t().motherOptional, undefined), textField(t().fatherOptional, undefined)];
+        group.append(hint, ...newParents.map((field) => field.element));
+        box.replaceChildren(group);
+      }
+    };
+    chosenChanged();
   } else if (kind === 'child') {
     const lasting = partners.filter((p) => !unionEnd(p.union) && !['divorced', 'separated'].includes(unionStatus(p.union)));
     const options = [...partners.map((p) => ({ value: p.partner!.id, label: shortName(p.partner!) })), { value: '', label: t().unknownParent }];
@@ -512,7 +521,9 @@ export function openAddRelative(kind: Kind, person: Person, context: EditorConte
       } else if (kind === 'sibling') {
         let parents: string[];
         if (shared) {
+          // From whichever side had them: the other one becomes their child too.
           parents = shared.value().split('+');
+          edits.push({ kind: 'add-child', parents, child: person.id });
         } else {
           // A mother and a father, as named — or stand-ins to name later, whose ids follow once they are.
           const stand = [

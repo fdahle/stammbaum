@@ -58,6 +58,8 @@ export default defineConfig(({ mode }) => ({
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __FAMILY_COMMIT__: JSON.stringify(familyCommit(familyDir)),
+    // STAMMBAUM_FLAGS=off: country names without flags, and no flag font in the build.
+    __FLAGS__: JSON.stringify(process.env.STAMMBAUM_FLAGS !== 'off'),
   },
   resolve: {
     alias: {

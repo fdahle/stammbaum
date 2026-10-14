@@ -114,6 +114,8 @@ const de = {
   times: (count: number) => `${count}-mal`,
 
   fit: 'Ganzen Stammbaum zeigen',
+  onlyMyFamily: 'Nur meine Familie',
+  onlyMyFamilyHint: 'Nur Blutsverwandte und ihre Partner — ohne die Familien der Partner',
   ancestorsOf: (name: string) => `Vorfahren von ${name}`,
   descendantsOf: (name: string) => `Nachkommen von ${name}`,
 
@@ -381,6 +383,8 @@ const en: Dict = {
   times: (count) => `${count} times`,
 
   fit: 'Show the whole tree',
+  onlyMyFamily: 'Only my family',
+  onlyMyFamilyHint: 'Only blood relatives and their partners — not their partners’ families',
   ancestorsOf: (name) => `Ancestors of ${name}`,
   descendantsOf: (name) => `Descendants of ${name}`,
 

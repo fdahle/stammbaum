@@ -7,7 +7,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# off: country names without flags, and no flag font in the image.
+ARG STAMMBAUM_FLAGS=on
+RUN STAMMBAUM_FLAGS=$STAMMBAUM_FLAGS npm run build
 
 FROM node:22-slim
 WORKDIR /app

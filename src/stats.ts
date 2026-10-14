@@ -1,4 +1,5 @@
 import type { Family } from './family';
+import { placeName } from './places';
 import { isDeceased, knownDate, unionStatus, type Person, type Union } from './parser/types';
 import { ageOf, familyName, parseDate, yearsBetween, type DateParts } from './ui/format';
 
@@ -74,7 +75,8 @@ export function familyStats(family: Family, now: DateParts): Stats {
     stats.mostChildren = { couples: winners.map((u) => partnersOf(family, u)), count };
   }
 
-  const birthplace = mostCommon(people.map((p) => p.birthplace));
+  // "Nürnberg" and "Nuremberg" are one place.
+  const birthplace = mostCommon(people.map((p) => p.birthplace && placeName(p.birthplace, 'de')));
   if (birthplace) stats.birthplace = birthplace;
   const birthCountries = byFrequency(people.map((p) => p.birthcountry));
   if (birthCountries.length > 0) stats.birthCountries = birthCountries;

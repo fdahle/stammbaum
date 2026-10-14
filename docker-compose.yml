@@ -6,7 +6,11 @@
 # with every earlier version. Back that folder up and you have everything.
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        # off leaves the country flags (and their small font) out of the build.
+        STAMMBAUM_FLAGS: ${STAMMBAUM_FLAGS:-on}
     ports:
       - "127.0.0.1:${PORT:-8080}:8080"
     volumes:

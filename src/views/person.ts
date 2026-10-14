@@ -1,4 +1,5 @@
-import { countryList, countryName } from '../countries';
+import { countryLabel, countryList } from '../countries';
+import { placeName } from '../places';
 import { galleryUrls } from '../data';
 import type { Family } from '../family';
 import { lang, t } from '../i18n';
@@ -25,9 +26,6 @@ export interface PersonContext {
   viewer: string | undefined;
   /** Asks who to compare `person` with, then shows how the two are related. */
   pickRelative(person: Person): void;
-  setViewer(id: string): void;
-  /** Asks who is looking. */
-  chooseViewer(): void;
   /** Opens the editor for `person` — only there when whoever is looking may edit. */
   edit?: ((person: Person) => void) | undefined;
 }
@@ -165,24 +163,24 @@ function focusCard(
   card.className = `focus-card card bg-base-100 shadow-sm${isDeceased(person) ? ' is-deceased' : ''}`;
   const portrait = bubble(person);
   card.append(portrait);
+  // Editing sits quietly in the corner, for whoever may.
+  const { edit } = context;
+  if (edit) {
+    const pen = document.createElement('button');
+    pen.type = 'button';
+    pen.className = 'focus-edit btn btn-ghost btn-circle btn-sm';
+    pen.title = t().edit;
+    pen.setAttribute('aria-label', t().editTitle(person.name));
+    pen.append(icon('pencil'));
+    pen.addEventListener('click', () => edit(person));
+    card.append(pen);
+  }
 
   const name = document.createElement('h1');
   name.className = 'focus-name';
   name.textContent = person.name;
   card.append(name);
   if (relation) card.append(line('focus-relation', relation));
-  // Says whose point of view every caption here is written from, and lets a
-  // borrowed phone change it.
-  const viewer = context.viewer && context.viewer !== person.id ? family.person(context.viewer) : undefined;
-  if (viewer) {
-    const seen = document.createElement('button');
-    seen.type = 'button';
-    seen.className = 'focus-viewer';
-    seen.textContent = t().seenBy(shortName(viewer));
-    seen.title = t().changeViewer;
-    seen.addEventListener('click', () => context.chooseViewer());
-    card.append(seen);
-  }
 
   if (person.nick && person.nick !== shortName(person)) {
     card.append(line('focus-nick', lang() === 'de' ? `„${person.nick}“` : `“${person.nick}”`));
@@ -201,7 +199,7 @@ function focusCard(
   };
   // A place and its country: "Lindau, Deutschland", or either alone.
   const where = (place: string | undefined, country: string | undefined) =>
-    [place, country && countryName(country)].filter(Boolean).join(', ') || undefined;
+    [place && placeName(place), country && countryLabel(country)].filter(Boolean).join(', ') || undefined;
   dated('*', person.born, where(person.birthplace, person.birthcountry));
   dated('†', person.died, where(person.deathplace, person.deathcountry), isDeceased(person));
   if (dates.length > 0) card.append(line('focus-dates', dates.join('\n')));
@@ -214,7 +212,7 @@ function focusCard(
   }
   const home = where(person.lives, person.country);
   if (home) card.append(line('focus-lives', t().lives(home)));
-  const nationalities = countryList(person.nationality).map((country) => countryName(country));
+  const nationalities = countryList(person.nationality).map((country) => countryLabel(country));
   if (nationalities.length > 0) card.append(line('focus-lives', t().nationality(nationalities.join(', '))));
   if (family.adopted(person.id)) card.append(line('focus-adopted', t().adopted));
   if (person.note) card.append(line('focus-note', person.note));
@@ -276,9 +274,6 @@ function actions(family: Family, person: Person, context: PersonContext): HTMLEl
   add('link', t().relatedTo, () => context.pickRelative(person));
   if (family.parents(person.id).length > 0) add('up', t().ancestors, `#/up/${id}`);
   if (family.children(person.id).length > 0) add('down', t().descendants, `#/down/${id}`);
-  if (context.viewer !== person.id) add('me', t().thisIsMe, () => context.setViewer(person.id));
-  const { edit } = context;
-  if (edit) add('pencil', t().edit, () => edit(person));
   return row;
 }
 
