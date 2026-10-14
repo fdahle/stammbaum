@@ -51,6 +51,20 @@ describe('dates and ages', () => {
   });
 });
 
+describe('birthdays on 29 February', () => {
+  const leap = { id: 'l', name: 'L', born: '2000-02-29' };
+
+  it('fall on the 28th when the year has no 29th', () => {
+    expect(hasBirthday(leap, on(2026, 2, 28))).toBe(true);
+    expect(hasBirthday(leap, on(2026, 3, 1))).toBe(false);
+  });
+
+  it('fall on the 29th in a leap year', () => {
+    expect(hasBirthday(leap, on(2028, 2, 29))).toBe(true);
+    expect(hasBirthday(leap, on(2028, 2, 28))).toBe(false);
+  });
+});
+
 describe('lifespan', () => {
   it('marks a death without a date with a cross rather than the word', () => {
     expect(lifespan({ id: 'a', name: 'A', born: '1920', died: 'true' })).toBe('1920 – †');

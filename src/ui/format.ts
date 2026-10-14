@@ -108,7 +108,20 @@ export function ageOf(person: Person, now: DateParts): { years: number; approx: 
 
 export function hasBirthday(person: Person, now: DateParts): boolean {
   const born = parseDate(person.born);
-  return person.died === undefined && !!born && born.m === now.m && born.d === now.d;
+  if (isDeceased(person) || !born?.m || !born.d) return false;
+  const day = anniversaryIn(born, now.y);
+  return day.m === now.m && day.d === now.d;
+}
+
+export function isLeapYear(y: number): boolean {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+/** The day a full date comes round in year `y` — a 29 February on the 28th in other years. */
+export function anniversaryIn(date: DateParts, y: number): Required<DateParts> {
+  const m = date.m ?? 1;
+  const d = date.d ?? 1;
+  return m === 2 && d === 29 && !isLeapYear(y) ? { y, m: 2, d: 28 } : { y, m, d };
 }
 
 /** A stable pastel per person, used when there is no photo. */
