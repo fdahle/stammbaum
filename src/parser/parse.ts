@@ -36,10 +36,12 @@ export function parseFamily(markdown: string): FamilyGraph {
     const warn = (message: string) => warnings.push({ line, message, text });
 
     if (!tokens[0]!.quoted && tokens[0]!.value === 'person') {
-      readPerson(tokens, people, warn);
+      readPerson(tokens, line, people, warn);
     } else if (
       tokens.some(
-        (t) => !t.quoted && (t.value === '+' || t.value === '->' || t.value.startsWith('children=')),
+        (t) =>
+          !t.quoted &&
+          (t.value === '+' || t.value === '->' || t.value.startsWith('children=') || t.value.startsWith('adopted=')),
       )
     ) {
       readRelation(tokens, unions, warn);
@@ -66,6 +68,7 @@ export function parseFamily(markdown: string): FamilyGraph {
   else if (me) warnings.push({ line: me.line, message: `"me" names unknown person "${me.id}"`, text: me.text });
 
   graph.unions = [...unions.values()];
+  check(graph);
   return graph;
 }
 
@@ -109,14 +112,15 @@ const SEXES = new Map<string, Sex>([
 ]);
 const UNION_KEYS = new Set(['married', 'divorced', 'together', 'separated', 'children', 'adopted']);
 
-function readPerson(tokens: Token[], people: Map<string, Person>, warn: (m: string) => void): void {
+function readPerson(tokens: Token[], line: number, people: Map<string, Person>, warn: (m: string) => void): void {
   const id = tokens[1]?.value;
   if (!id) {
     warn('person needs an id');
     return;
   }
-  const person: Person = people.get(id) ?? { id, name: id };
-  delete person.stub;
+  const earlier = people.get(id);
+  if (earlier) warn(`"${id}" was already declared on line ${earlier.line ?? '?'} — the later values win`);
+  const person: Person = earlier ?? { id, name: id, line };
   people.set(id, person);
 
   let rest = tokens.slice(2);
@@ -154,7 +158,12 @@ function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: str
   const after = trailing === -1 ? [] : right.slice(trailing);
   if (trailing !== -1) right = right.slice(0, trailing);
 
-  const partners: string[] = [left[0]!.value];
+  const first = left[0];
+  if (!first || (!first.quoted && first.value === '+')) {
+    warn('relation needs a person before "+" or "->"');
+    return;
+  }
+  const partners: string[] = [first.value];
   let rest = left.slice(1);
   if (rest[0] && !rest[0].quoted && rest[0].value === '+') {
     const second = rest[1];
@@ -165,7 +174,7 @@ function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: str
     partners.push(second.value);
     rest = rest.slice(2);
   }
-  if (partners.some((p) => p === '' || p.includes('='))) {
+  if (partners.some((p) => p === '' || p === '+' || p.includes('='))) {
     warn('relation needs plain person ids on the left');
     return;
   }
@@ -244,11 +253,75 @@ function* dslLines(markdown: string): Generator<{ text: string; line: number }> 
       continue;
     }
     if (!inside) continue;
-    const text = raw.replace(/%%.*$/, '').replace(/^\s*#.*$/, '').trim();
+    const text = stripComment(raw).replace(/^\s*#.*$/, '').trim();
     if (text !== '') yield { text, line: i + 1 };
   }
 }
 
+/** Cuts a `%%` comment off a line — unless the `%%` is inside quotes, as in `note="100%%"`. */
+function stripComment(raw: string): string {
+  let quoted = false;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '"') quoted = !quoted;
+    else if (!quoted && raw.startsWith('%%', i)) return raw.slice(0, i);
+  }
+  return raw;
+}
+
 function firstHeading(markdown: string): string | undefined {
   return /^#\s+(.+)$/m.exec(markdown)?.[1]?.trim();
+}
+
+// ---- plausibility -----------------------------------------------------------
+
+/**
+ * Mistakes that parse fine but cannot be true: a child older than its parent,
+ * a death before the birth, someone who ends up their own ancestor. Usually a
+ * typo in a date or an id.
+ */
+function check(graph: FamilyGraph): void {
+  const warn = (person: Person, message: string) =>
+    graph.warnings.push({ line: person.line ?? 0, message, text: person.id });
+
+  for (const person of graph.people.values()) {
+    const born = yearOf(person.born);
+    const died = yearOf(person.died);
+    if (born !== undefined && died !== undefined && died < born) warn(person, `"${person.id}" died before they were born`);
+  }
+
+  const parentsOf = new Map<string, string[]>();
+  for (const union of graph.unions) {
+    for (const child of union.children) {
+      parentsOf.set(child, [...(parentsOf.get(child) ?? []), ...union.partners]);
+      // An adopted child may well be older than a young adoptive parent.
+      const person = graph.people.get(child);
+      const born = yearOf(person?.born);
+      if (!person || born === undefined || union.adopted?.includes(child)) continue;
+      for (const parent of union.partners) {
+        const parentBorn = yearOf(graph.people.get(parent)?.born);
+        if (parentBorn !== undefined && born <= parentBorn) {
+          warn(person, `"${child}" is born no later than their parent "${parent}"`);
+        }
+      }
+    }
+  }
+
+  for (const person of graph.people.values()) {
+    const seen = new Set<string>();
+    const queue = [...(parentsOf.get(person.id) ?? [])];
+    for (const id of queue) {
+      if (id === person.id) {
+        warn(person, `"${person.id}" ends up among their own ancestors`);
+        break;
+      }
+      if (seen.has(id)) continue;
+      seen.add(id);
+      queue.push(...(parentsOf.get(id) ?? []));
+    }
+  }
+}
+
+function yearOf(date: string | undefined): number | undefined {
+  const match = date ? /^(\d{4})/.exec(date) : null;
+  return match ? Number(match[1]) : undefined;
 }

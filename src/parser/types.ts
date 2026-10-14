@@ -26,6 +26,8 @@ export interface Person {
   login?: string;
   /** True when the person was only referenced by a relation, never declared. */
   stub?: boolean;
+  /** Where the `person` line is in family.md, for warnings about them. */
+  line?: number;
 }
 
 export type Sex = 'm' | 'f';

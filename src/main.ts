@@ -559,9 +559,16 @@ if (family.graph.warnings.length > 0) {
   const heading = document.createElement('strong');
   heading.textContent = t().warnings(family.graph.warnings.length);
   const list = document.createElement('ul');
-  for (const warning of family.graph.warnings.slice(0, 8)) {
+  const shown = 8;
+  for (const warning of family.graph.warnings.slice(0, shown)) {
     const item = document.createElement('li');
     item.textContent = warning.line > 0 ? t().warningLine(warning.line, warning.message) : warning.message;
+    list.append(item);
+  }
+  const rest = family.graph.warnings.length - shown;
+  if (rest > 0) {
+    const item = document.createElement('li');
+    item.textContent = t().moreWarnings(rest);
     list.append(item);
   }
   banner.append(heading, list);

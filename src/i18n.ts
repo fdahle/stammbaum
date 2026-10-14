@@ -32,6 +32,7 @@ const de = {
   hintMouse: 'Ziehen zum Bewegen · Mausrad zum Zoomen · Klick für eine Person',
   warnings: (count: number) => `${count} ${count === 1 ? 'Hinweis' : 'Hinweise'} in family.md`,
   warningLine: (line: number, message: string) => `Zeile ${line}: ${message}`,
+  moreWarnings: (count: number) => `… und ${count} weitere`,
 
   menu: 'Einstellungen',
   iAm: 'Ich bin',
@@ -113,6 +114,7 @@ const en: Dict = {
   hintMouse: 'Drag to move · scroll to zoom · click a person',
   warnings: (count) => `${count} ${count === 1 ? 'note' : 'notes'} on family.md`,
   warningLine: (line, message) => `Line ${line}: ${message}`,
+  moreWarnings: (count) => `… and ${count} more`,
 
   menu: 'Settings',
   iAm: 'I am',

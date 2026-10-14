@@ -139,3 +139,41 @@ describe('unionStatus', () => {
     }
   });
 });
+
+const block = (lines: string) => parseFamily(`\`\`\`family\n${lines}\n\`\`\``);
+const messages = (lines: string) => block(lines).warnings.map((w) => w.message);
+
+describe('mistakes in the file', () => {
+  it('warns about a relation with nobody in front of it instead of failing', () => {
+    const graph = block('person anna "Anna"\n-> anna\n+ anna');
+    expect([...graph.people.keys()]).toEqual(['anna']);
+    expect(graph.warnings.map((w) => w.line)).toEqual([3, 4]);
+  });
+
+  it('keeps %% inside quotes and still strips the comment after them', () => {
+    expect(block('person a "A" note="100%% sicher" %% a comment').people.get('a')?.note).toBe('100%% sicher');
+  });
+
+  it('warns when a person is declared twice', () => {
+    expect(messages('person a "A"\nperson a "Anna"')).toEqual(['"a" was already declared on line 2 — the later values win']);
+  });
+
+  it('warns about a child older than its parent, a death before the birth, and a loop', () => {
+    const found = messages(
+      'person p "P" born=1990\nperson c "C" born=1980 died=1970\np -> c\nperson x "X"\nperson y "Y"\nx -> y\ny -> x',
+    );
+    expect(found).toContain('"c" died before they were born');
+    expect(found).toContain('"c" is born no later than their parent "p"');
+    expect(found).toContain('"x" ends up among their own ancestors');
+    expect(found).toContain('"y" ends up among their own ancestors');
+  });
+
+  it('does not mind an adopted child older than a young adoptive parent', () => {
+    expect(messages('person p "P" born=1990\nperson c "C" born=1985\np adopted=c')).toEqual([]);
+  });
+
+  it('has nothing to say about the sample', () => {
+    expect(parseFamily(sample).warnings).toEqual([]);
+  });
+});
+
