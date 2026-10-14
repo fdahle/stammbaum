@@ -93,7 +93,7 @@ export class Family {
     if (words.length === 0) return [];
     return this.people()
       .map((person) => {
-        const haystacks = [...fields(person), ...(options.extra?.(person) ?? [])].map((h) => normalise(h ?? ''));
+        const haystacks = [...fields(person), ...(options.extra?.(person) ?? [])].map((h) => spellings(h ?? ''));
         let total = 0;
         for (const word of words) {
           const best = score(haystacks, word);
@@ -209,21 +209,36 @@ function fields(person: Person): Array<string | undefined> {
 }
 
 /** Word starts beat matches inside a word, and earlier fields beat later ones. */
-function score(haystacks: string[], needle: string): number {
+function score(haystacks: string[][], needle: string): number {
   let best = 0;
-  for (const [index, value] of haystacks.entries()) {
-    if (value === '') continue;
-    const at = value.indexOf(needle);
-    if (at === -1) continue;
-    const wordStart = at === 0 || value.includes(` ${needle}`) || value.includes(`-${needle}`);
-    best = Math.max(best, (wordStart ? 3 : 1) * 100 - index);
+  for (const [index, values] of haystacks.entries()) {
+    for (const value of values) {
+      const at = value.indexOf(needle);
+      if (at === -1) continue;
+      const wordStart = at === 0 || value.includes(` ${needle}`) || value.includes(`-${needle}`);
+      best = Math.max(best, (wordStart ? 3 : 1) * 100 - index);
+    }
   }
   return best;
 }
 
+/** Lower case, ß as ss, accents gone: "Straße" → "strasse", "Müller" → "muller". */
 function normalise(value: string): string {
-  return value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  return value.normalize('NFC').toLowerCase().replace(/ß/g, 'ss').normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
+
+/**
+ * The ways a field can be typed: "Müller" as "muller", and as "mueller" by
+ * anyone without umlauts on their keyboard.
+ */
+function spellings(value: string): string[] {
+  if (value === '') return [];
+  const plain = normalise(value);
+  const spelled = normalise(value.normalize('NFC').replace(/[äöüÄÖÜ]/g, (u) => `${UMLAUTS[u.toLowerCase()]}e`));
+  return spelled === plain ? [plain] : [plain, spelled];
+}
+
+const UMLAUTS: Record<string, string> = { ä: 'a', ö: 'o', ü: 'u' };
 
 function isPerson(person: Person | undefined): person is Person {
   return person !== undefined;

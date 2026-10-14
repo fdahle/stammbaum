@@ -107,3 +107,21 @@ describe('subtrees', () => {
     expect(new Family(graph).children('klaus').map((p) => p.id)).toEqual(['nina', 'jonas', 'luca']);
   });
 });
+
+describe('German spellings', () => {
+  const people = new Family(
+    parseFamily('```family\nperson m "Jürgen Müller" lives="Bad Wörishofen"\nperson s "Anna Strauß"\n```'),
+  );
+
+  it('finds umlauts typed as they are, without the dots, or spelled out', () => {
+    for (const query of ['müller', 'muller', 'mueller', 'MUELLER', 'woerishofen', 'jurgen', 'juergen']) {
+      expect(people.search(query).map((p) => p.id)).toEqual(['m']);
+    }
+  });
+
+  it('finds ß as ss', () => {
+    for (const query of ['strauß', 'strauss']) {
+      expect(people.search(query).map((p) => p.id)).toEqual(['s']);
+    }
+  });
+});

@@ -730,6 +730,11 @@
     overflow: auto;
   }
 
+  /* The hit Enter opens, moved with the arrow keys. */
+  .results .result.is-active {
+    background: var(--color-base-200);
+  }
+
   /* ---- settings menu ---------------------------------------------------- */
 
   .settings-menu > summary {

@@ -278,11 +278,26 @@ backButton.addEventListener('click', () => {
 // ---- search ---------------------------------------------------------------
 
 let hits: Person[] = [];
+/** The hit Enter opens, moved with the arrow keys. */
+let active = 0;
 
 function closeResults(): void {
   results.hidden = true;
   results.replaceChildren();
   searchInput.setAttribute('aria-expanded', 'false');
+  searchInput.removeAttribute('aria-activedescendant');
+}
+
+function markActive(index: number): void {
+  active = (index + hits.length) % hits.length;
+  [...results.children].forEach((item, i) => {
+    item.setAttribute('aria-selected', String(i === active));
+    item.querySelector('.result')?.classList.toggle('is-active', i === active);
+    if (i === active) {
+      searchInput.setAttribute('aria-activedescendant', item.id);
+      item.scrollIntoView({ block: 'nearest' });
+    }
+  });
 }
 
 /** On a phone the field lives under the bar and is opened by the search icon. */
@@ -323,8 +338,9 @@ searchInput.addEventListener('input', () => {
     return;
   }
   results.replaceChildren(
-    ...hits.map((person) => {
+    ...hits.map((person, index) => {
       const item = document.createElement('li');
+      item.id = `result-${index}`;
       item.setAttribute('role', 'option');
       const button = document.createElement('button');
       button.type = 'button';
@@ -342,10 +358,17 @@ searchInput.addEventListener('input', () => {
   );
   results.hidden = false;
   searchInput.setAttribute('aria-expanded', 'true');
+  markActive(0);
 });
 
 searchInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && hits[0]) openPerson(hits[0]);
+  const open = !results.hidden && hits.length > 0;
+  if (open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    event.preventDefault();
+    markActive(active + (event.key === 'ArrowDown' ? 1 : -1));
+  }
+  const hit = hits[active];
+  if (event.key === 'Enter' && open && hit) openPerson(hit);
   if (event.key === 'Escape') {
     closeResults();
     closeSearch();
