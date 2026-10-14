@@ -1,7 +1,7 @@
 import type { Family } from '../family';
 import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from '../layout/layout';
 import { familyStamp, photoUrl } from '../data';
-import { familyName, initials, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
+import { familyName, initials, isStandIn, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
 import { icon, weddingRings, RINGS } from '../ui/icons';
 import { isDeceased, unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
 import { t } from '../i18n';
@@ -722,7 +722,7 @@ export class OverviewView {
   private drawNode(person: Person, node: NodeBox): SVGGElement {
     const r = METRICS.bubbleRadius;
     const group = svgEl('g', {
-      class: `node${isDeceased(person) ? ' is-deceased' : ''}`,
+      class: `node${isDeceased(person) ? ' is-deceased' : ''}${isStandIn(person) ? ' is-stand-in' : ''}`,
       transform: `translate(${node.x} ${node.y})`,
       tabindex: 0,
       role: 'button',

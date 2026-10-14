@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ageOf, hasBirthday, lifespan, parseDate, yearsBetween } from '../src/ui/format';
+import { ageOf, hasBirthday, initials, isStandIn, lifespan, parseDate, yearsBetween } from '../src/ui/format';
 
 const on = (y: number, m: number, d: number) => ({ y, m, d });
 
@@ -76,5 +76,17 @@ describe('lifespan', () => {
     expect(lifespan({ id: 'a', name: 'A', born: '1920-03-01', died: '1990' })).toBe('1920 – 1990');
     expect(lifespan({ id: 'a', name: 'A', born: '1986' })).toBe('* 1986');
     expect(lifespan({ id: 'a', name: 'A', born: '?' })).toBe('');
+  });
+});
+
+describe('stand-ins', () => {
+  it('are told apart by name, in either language, and drawn with a question mark', () => {
+    expect(isStandIn({ id: 'mutter', name: 'Mutter von Erna' })).toBe(true);
+    expect(isStandIn({ id: 'p', name: 'Parents of Anna' })).toBe(true);
+    expect(isStandIn({ id: 'x', name: 'Elternteil von Leon' })).toBe(true);
+    expect(isStandIn({ id: 'v', name: 'Vater' })).toBe(false);
+    expect(isStandIn({ id: 'k', name: 'Konrad von Vaterstetten' })).toBe(false);
+    expect(initials({ id: 'mutter', name: 'Mutter von Erna' })).toBe('?');
+    expect(initials({ id: 'k', name: 'Klaus Bauer' })).toBe('KB');
   });
 });

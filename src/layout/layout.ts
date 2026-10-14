@@ -53,6 +53,14 @@ export function layoutFamily(graph: FamilyGraph): Layout {
     }
   }
 
+  // Brothers and sisters who married someone with a family of their own in
+  // the file go last: their partner is placed to their right, and that
+  // family further right still, so nobody else stands between the two.
+  const hasParents = new Set(graph.unions.flatMap((u) => u.children));
+  const marriedOut = (id: string) =>
+    (unionsByPerson.get(id) ?? []).some((u) => u.partners.some((p) => p !== id && hasParents.has(p)));
+  const inOrder = (children: string[]) => [...children].sort((a, b) => Number(marriedOut(a)) - Number(marriedOut(b)));
+
   const nodes = new Map<string, NodeBox>();
   const placedUnions = new Set<string>();
   const step = METRICS.nodeWidth + METRICS.nodeGap;
@@ -94,7 +102,7 @@ export function layoutFamily(graph: FamilyGraph): Layout {
       const ids: string[] = [];
       let min = Infinity;
       let max = -Infinity;
-      for (const child of union.children) {
+      for (const child of inOrder(union.children)) {
         if (nodes.has(child)) continue;
         const sub = place(child, cursor);
         if (sub.ids.length === 0) continue;
@@ -268,30 +276,47 @@ function average(values: number[]): number {
 }
 
 /**
- * Longest-path generation numbering: every child sits at least one row below
- * both of its parents, and partners are pulled onto the same row.
+ * Generation numbering. Rows only ever move down, until nothing changes:
+ *
+ * - every child sits at least one row below both of its parents,
+ * - partners share a row,
+ * - brothers and sisters share a row — one who married into a younger
+ *   generation takes the others along, rather than leaving them stranded
+ *   rows above,
+ * - and people with no parents in the file sit right above their children
+ *   instead of up on the first row: someone's in-laws belong over them, not
+ *   at the top of the page with a line running down past everyone between.
  */
 function assignGenerations(graph: FamilyGraph): Map<string, number> {
   const generation = new Map<string, number>();
   for (const id of graph.people.keys()) generation.set(id, 0);
+  const gen = (id: string) => generation.get(id) ?? 0;
+  const hasParents = new Set(graph.unions.flatMap((u) => u.children));
+
+  let changed = false;
+  const lower = (id: string, to: number) => {
+    if (gen(id) < to) {
+      generation.set(id, to);
+      changed = true;
+    }
+  };
 
   const limit = graph.people.size * 2 + 10;
   for (let pass = 0; pass < limit; pass++) {
-    let changed = false;
+    changed = false;
     for (const union of graph.unions) {
-      const partnerGen = Math.max(...union.partners.map((p) => generation.get(p) ?? 0));
-      for (const partner of union.partners) {
-        if ((generation.get(partner) ?? 0) < partnerGen) {
-          generation.set(partner, partnerGen);
-          changed = true;
-        }
-      }
-      for (const child of union.children) {
-        if ((generation.get(child) ?? 0) < partnerGen + 1) {
-          generation.set(child, partnerGen + 1);
-          changed = true;
-        }
-      }
+      const partnerGen = Math.max(...union.partners.map(gen));
+      for (const partner of union.partners) lower(partner, partnerGen);
+      const childGen = Math.max(partnerGen + 1, ...union.children.map(gen));
+      for (const child of union.children) lower(child, childGen);
+    }
+    // Parents of their own nobody knows: down to just above their nearest children.
+    for (const id of graph.people.keys()) {
+      if (hasParents.has(id)) continue;
+      const own = graph.unions.filter((u) => u.partners.includes(id) && u.children.length > 0);
+      // A partner with parents in the file keeps the couple where it is.
+      if (own.length === 0 || own.some((u) => u.partners.some((p) => hasParents.has(p)))) continue;
+      lower(id, Math.min(...own.flatMap((u) => u.children.map(gen))) - 1);
     }
     if (!changed) break;
   }

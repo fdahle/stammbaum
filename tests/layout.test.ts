@@ -63,3 +63,39 @@ describe('a couple who married twice', () => {
     expect(Math.abs(a!.x - b!.x)).toBeGreaterThanOrEqual(METRICS.nodeWidth);
   });
 });
+
+describe('rows for families that marry into each other', () => {
+  // Christian married into a younger generation than his brothers'; Anja's
+  // parents and Erna's have no parents of their own in the file.
+  const family = layoutFamily(
+    parseFamily(`\`\`\`family
+eltern -> christian, heiko, henning
+mutter + vater -> erna, lisellotte
+erna + hermann -> birgit
+birgit + christian -> felix, carolina
+elke + unger -> anja, trini
+felix + anja -> leon
+\`\`\``),
+  );
+  const row = (id: string) => family.nodes.get(id)!.generation;
+
+  it('keeps brothers and sisters on one row', () => {
+    expect(row('heiko')).toBe(row('christian'));
+    expect(row('henning')).toBe(row('christian'));
+    expect(row('trini')).toBe(row('anja'));
+    expect(row('carolina')).toBe(row('felix'));
+  });
+
+  it('puts parents with no parents of their own right above their children', () => {
+    expect(row('elke')).toBe(row('anja') - 1);
+    expect(row('unger')).toBe(row('anja') - 1);
+    expect(row('eltern')).toBe(row('christian') - 1);
+    expect(row('mutter')).toBe(row('erna') - 1);
+  });
+
+  it('still keeps every child below its parents and partners side by side', () => {
+    expect(row('leon')).toBe(row('felix') + 1);
+    expect(row('felix')).toBe(row('anja'));
+    expect(row('birgit')).toBe(row('christian'));
+  });
+});

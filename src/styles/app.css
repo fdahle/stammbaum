@@ -207,6 +207,25 @@
     outline: none;
   }
 
+  /* A parent nobody has named yet: an outline to fill in, not a person. */
+  .node.is-stand-in .bubble-ring,
+  .node.is-stand-in:hover .bubble-ring,
+  .node.is-stand-in:focus-visible .bubble-ring {
+    fill: none;
+    stroke: color-mix(in oklab, var(--color-base-content) 35%, transparent);
+    stroke-width: 2px;
+    stroke-dasharray: 5 4;
+  }
+
+  .node.is-stand-in:hover .bubble-ring,
+  .node.is-stand-in:focus-visible .bubble-ring {
+    stroke: var(--color-primary);
+  }
+
+  .node.is-stand-in .bubble-fill {
+    fill: var(--color-base-200);
+  }
+
   /* Whoever is looking finds themselves at a glance. */
   .node.is-me .bubble-ring {
     fill: var(--color-secondary);

@@ -11,7 +11,19 @@ export function familyName(person: Person): string {
   return parts.length > 1 ? parts.slice(1).join(' ') : '';
 }
 
+/**
+ * "Mutter von Felix", "Parents of Anna": someone the app put in for a parent
+ * nobody has named yet. Once they get a real name they are anyone else.
+ */
+const STAND_IN = /^(Mutter|Vater|Eltern|Elternteil|Mother|Father|Parents?) (von|of) \S/;
+
+export function isStandIn(person: Person): boolean {
+  return STAND_IN.test(person.name);
+}
+
+/** "KB" for Klaus Bauer — and a question mark for a stand-in, who has no name yet. */
 export function initials(person: Person): string {
+  if (isStandIn(person)) return '?';
   return person.name
     .split(/\s+/)
     .slice(0, 2)

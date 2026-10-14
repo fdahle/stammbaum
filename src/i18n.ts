@@ -80,6 +80,7 @@ const de = {
   missingNone: 'Nichts — die Datei ist vollständig.',
   fileNotes: 'Hinweise zur Datei',
   gaps: {
+    standIn: 'Platzhalter — noch zu benennen',
     undeclared: 'Ohne eigene person-Zeile',
     disconnected: 'Mit dem Rest nicht verbunden',
     noSex: 'Ohne sex= — die Beschriftung nennt beide Formen',
@@ -346,6 +347,7 @@ const en: Dict = {
   missingNone: 'Nothing — the file is complete.',
   fileNotes: 'Notes on the file',
   gaps: {
+    standIn: 'Stand-ins — still to be named',
     undeclared: 'No person line of their own',
     disconnected: 'Not connected to the rest',
     noSex: 'No sex= — captions give both forms',

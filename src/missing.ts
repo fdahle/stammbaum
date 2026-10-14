@@ -1,9 +1,10 @@
 import type { Family } from './family';
 import { isDeceased, knownDate, type Person } from './parser/types';
-import { OLDEST, parseDate, year, type DateParts } from './ui/format';
+import { isStandIn, OLDEST, parseDate, year, type DateParts } from './ui/format';
 
 /** What family.md does not know yet about someone, worst first. */
 export type GapKind =
+  | 'standIn'
   | 'undeclared'
   | 'disconnected'
   | 'noSex'
@@ -20,6 +21,7 @@ export interface Gap {
 }
 
 const ORDER: GapKind[] = [
+  'standIn',
   'undeclared',
   'disconnected',
   'noSex',
@@ -43,6 +45,11 @@ export function gaps(family: Family, hasPhoto: (person: Person) => boolean, now:
   const connected = mainBranch(family);
   const people = family.people().sort((a, b) => (a.line ?? Infinity) - (b.line ?? Infinity));
   for (const person of people) {
+    // A stand-in needs a name first; dates and a photo come with the real person.
+    if (isStandIn(person)) {
+      add('standIn', person, person.name);
+      continue;
+    }
     if (person.stub) add('undeclared', person);
     if (!connected.has(person.id)) add('disconnected', person);
     if (!person.sex) add('noSex', person);
