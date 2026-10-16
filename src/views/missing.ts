@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { t, warningText } from '../i18n';
 import type { Gap } from '../missing';
 import type { Diagnostic, Person } from '../parser/types';
 import { displayName, lifespan } from '../ui/format';
@@ -65,7 +65,7 @@ export function renderMissing(
     notes.className = 'gap-notes';
     for (const warning of warnings) {
       const item = document.createElement('li');
-      item.textContent = warning.line > 0 ? t().warningLine(warning.line, warning.message) : warning.message;
+      item.textContent = warningText(warning);
       notes.append(item);
     }
     root.append(section(t().fileNotes, warnings.length, notes));

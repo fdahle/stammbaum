@@ -9,9 +9,7 @@
   </head>
   <body>
     <div id="app" class="app-shell">
-      <header
-        class="app-bar navbar z-30 min-h-14 flex-wrap gap-1 border-b border-base-300 bg-base-100 px-2 py-0"
-      >
+      <header class="app-bar navbar z-30 min-h-14 flex-wrap gap-1 border-b border-base-300 bg-base-100">
         <a href="#/" class="btn btn-ghost h-12 min-h-0 gap-2 px-2 text-base font-semibold">
           <span
             class="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"
@@ -30,6 +28,9 @@
             spellcheck="false"
             placeholder="Wer ist das?"
             aria-label="Person suchen"
+            role="combobox"
+            aria-controls="results"
+            aria-autocomplete="list"
             aria-expanded="false"
             class="input input-lg h-12 w-full rounded-full bg-base-200 text-base"
           />
@@ -39,6 +40,8 @@
 
       <main id="view" class="view"></main>
     </div>
+    <!-- What the toasts say, read out by screen readers: one region, its text replaced. -->
+    <div id="announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

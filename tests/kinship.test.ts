@@ -222,3 +222,38 @@ describe('a couple who married each other twice', () => {
     expect(relation(twice, 'c', 'd')).toBe('Bruder');
   });
 });
+
+describe('adopted brothers and sisters, and a parent nobody knows', () => {
+  const family = new Family(
+    parseFamily(`\`\`\`family
+person eigen "Eigen" sex=m
+person adoptiert "Adoptiert" sex=f
+person halb "Halb" sex=m
+person allein "Allein" sex=m
+person beide "Beide" sex=f
+mama + papa -> eigen
+mama + papa adopted=adoptiert
+leibmutter + leibvater -> adoptiert
+leibmutter + anderer -> halb
+m -> allein
+m + p -> beide
+\`\`\``),
+  );
+
+  it('calls an adopted child a full sister of the parents’ own children', () => {
+    expect(relation(family, 'eigen', 'adoptiert')).toBe('Schwester');
+    expect(relation(family, 'adoptiert', 'eigen')).toBe('Bruder');
+    expect(family.siblings('eigen')).toEqual([{ person: family.person('adoptiert'), half: false }]);
+  });
+
+  it('still knows the half brother through the birth mother', () => {
+    expect(relation(family, 'adoptiert', 'halb')).toBe('Halbbruder');
+    expect(relation(family, 'adoptiert', 'halb', 'en')).toBe('Half-brother');
+  });
+
+  it('does not call them half when one parent is simply unknown', () => {
+    expect(relation(family, 'beide', 'allein')).toBe('Bruder');
+    expect(relation(family, 'allein', 'beide')).toBe('Schwester');
+    expect(family.siblings('allein').map((s) => [s.person.id, s.half])).toEqual([['beide', false]]);
+  });
+});

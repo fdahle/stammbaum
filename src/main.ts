@@ -6,13 +6,14 @@ import { photosWithoutThumb, photoUrl, readFamily } from './data';
 import { makeThumb } from './edit/photos';
 import { confirmMerge, openEditor, openNewPerson, type EditorContext } from './edit/editor';
 import { Family } from './family';
-import { LANGS, lang, setLang, t } from './i18n';
+import { LANGS, lang, setLang, t, warningText } from './i18n';
 import { relation } from './kinship';
 import { duplicates, gaps } from './missing';
 import type { Person } from './parser/types';
 import type { Edit } from './parser/write';
-import { SaveConflict, type FamilySource } from './source/types';
+import { SaveConflict, UnsupportedImage, type FamilySource } from './source/types';
 import { familyStats } from './stats';
+import { navigate } from './ui/back';
 import { displayName, lifespan, nameStandIns, shortName, today } from './ui/format';
 import { icon, iconButton, type IconName } from './ui/icons';
 import { closeMenu, openMenu } from './ui/menu';
@@ -47,10 +48,7 @@ const MODES = [
 type Mode = (typeof MODES)[number]['id'];
 
 // The hosted app asks the server; the single file has the family built in.
-let source: FamilySource = await loadSource().catch((error: unknown) => {
-  must<HTMLElement>('#view').textContent = t().loadFailed;
-  throw error;
-});
+let source: FamilySource = await firstSource();
 let family = new Family(readFamily(source));
 const appBar = must<HTMLElement>('.app-bar');
 const actions = must<HTMLElement>('.app-actions');
@@ -83,7 +81,11 @@ viewerButton.addEventListener('click', () => void chooseViewer());
 actions.append(backButton, searchToggle, viewerButton, menu);
 
 must<HTMLElement>('#crest').append(icon('tree'));
-title.textContent = family.graph.title;
+
+/** The heading of family.md — without one, the app's own name, in the language on screen. */
+function familyTitle(): string {
+  return /^#\s+\S/m.test(source.markdown) ? family.graph.title : t().appName;
+}
 
 // ---- who is looking -------------------------------------------------------
 
@@ -102,7 +104,8 @@ function setViewer(id: string | null): void {
   writeStored('stammbaum-me', id ?? NOBODY);
   // Someone new is looking: the tree is theirs, and opens on them.
   tree = makeTree();
-  subtrees.delete('all');
+  // Stand-ins in every tree are named for whoever looks.
+  subtrees.clear();
   refresh();
 }
 
@@ -156,7 +159,7 @@ async function pickRelative(person: Person): Promise<void> {
     extra: relationWords,
     exclude: person.id,
   });
-  if (other) location.hash = relationRoute(person, other);
+  if (other) navigate(relationRoute(person, other));
 }
 
 async function findRelation(): Promise<void> {
@@ -234,7 +237,7 @@ const subtrees = new Map<string, OverviewView>();
 let shownTree: OverviewView | undefined;
 
 function openFromTree(id: string): void {
-  location.hash = `#/p/${encodeURIComponent(id)}`;
+  navigate(`#/p/${encodeURIComponent(id)}`);
 }
 
 /** Right-click or long press on a tree: what can be done right there. */
@@ -265,15 +268,37 @@ function subtree(kind: 'up' | 'down', person: Person): OverviewView {
   return overview;
 }
 
+/** The address last put on screen, to tell a new page from the same one again. */
+let rendered: string | undefined;
+
+/**
+ * Puts the page the address names on screen. The same page again — after a
+ * save, or someone else's — keeps where it was scrolled to and the search.
+ */
 function render(): void {
-  closeResults();
-  closeSearch();
+  const same = location.hash === rendered;
+  rendered = location.hash;
+  if (!same || results.hidden) {
+    closeResults();
+    if (!same) closeSearch();
+  }
   closeMenu();
   const route = parseRoute(location.hash);
   if (!route) {
-    location.replace('#/');
+    // An old link, a renamed person, a typo: say so rather than quietly showing the tree.
+    if (!same && /^#\/?(p|up|down|r|path)\//.test(location.hash)) toast(t().personNotFound, 'info');
+    history.replaceState(history.state, '', '#/');
+    render();
     return;
   }
+  const scrolled = same ? view.scrollTop : 0;
+  show(route);
+  view.scrollTop = scrolled;
+  // The hits again, from the family as it is now.
+  if (same && !results.hidden) search(true);
+}
+
+function show(route: Route): void {
   backButton.hidden = route.kind === 'tree';
   shownTree = undefined;
   // A ring from the last search would read as part of whatever comes next.
@@ -289,8 +314,7 @@ function render(): void {
           edit: source.editable ? (someone) => openEditor(someone, editorContext()) : undefined,
         }),
       );
-      view.scrollTop = 0;
-      document.title = `${displayName(person)} — ${family.graph.title}`;
+      document.title = `${displayName(person)} — ${familyTitle()}`;
       return;
     }
     case 'relation': {
@@ -300,12 +324,11 @@ function render(): void {
           change: async (which) => {
             const keep = which === 'a' ? b : a;
             const other = await pickPerson(family, { title: t().pickOther(shortName(keep)), caption, extra: relationWords });
-            if (other) location.hash = which === 'a' ? relationRoute(other, b) : relationRoute(a, other);
+            if (other) navigate(which === 'a' ? relationRoute(other, b) : relationRoute(a, other));
           },
         }),
       );
-      view.scrollTop = 0;
-      document.title = `${shortName(a)} & ${shortName(b)} — ${family.graph.title}`;
+      document.title = `${shortName(a)} & ${shortName(b)} — ${familyTitle()}`;
       return;
     }
     case 'dates':
@@ -316,7 +339,7 @@ function render(): void {
       return;
     case 'missing':
       // The page lists the file's warnings itself.
-      document.querySelector('.warnings')?.remove();
+      dismissWarnings();
       showPage(
         renderMissing(
           gaps(family, (p) => !!photoUrl(p), today()),
@@ -336,7 +359,7 @@ function render(): void {
     case 'tree':
       if (family.people().length === 0) {
         view.replaceChildren(renderEmpty());
-        document.title = family.graph.title;
+        document.title = familyTitle();
         // A family that does not exist yet starts with its first person.
         if (source.editable && !offeredStart && !document.querySelector('dialog[open]')) {
           offeredStart = true;
@@ -346,14 +369,14 @@ function render(): void {
       }
       showTree(tree, undefined, undefined, viewer());
       tree.emphasize(undefined);
-      document.title = family.graph.title;
+      document.title = familyTitle();
       return;
     case 'path': {
       const { a, b } = route;
       const whole = wholeTree();
       showTree(whole, `${shortName(a)} ↔ ${shortName(b)}`, relationRoute(a, b));
       whole.emphasize(family.path(a.id, b.id));
-      document.title = `${shortName(a)} ↔ ${shortName(b)} — ${family.graph.title}`;
+      document.title = `${shortName(a)} ↔ ${shortName(b)} — ${familyTitle()}`;
       return;
     }
     case 'up':
@@ -361,7 +384,7 @@ function render(): void {
       const { person } = route;
       const label = route.kind === 'up' ? t().ancestorsOf(shortName(person)) : t().descendantsOf(shortName(person));
       showTree(subtree(route.kind, person), label, `#/p/${encodeURIComponent(person.id)}`, person.id);
-      document.title = `${label} — ${family.graph.title}`;
+      document.title = `${label} — ${familyTitle()}`;
       return;
     }
   }
@@ -399,8 +422,7 @@ function renderEmpty(): HTMLElement {
 /** Puts one of the list pages on screen. */
 function showPage(page: HTMLElement, title: string): void {
   view.replaceChildren(page);
-  view.scrollTop = 0;
-  document.title = `${title} — ${family.graph.title}`;
+  document.title = `${title} — ${familyTitle()}`;
 }
 
 /**
@@ -452,7 +474,7 @@ function scopeToggle(): HTMLButtonElement {
 
 window.addEventListener('hashchange', render);
 backButton.addEventListener('click', () => {
-  location.hash = '#/';
+  navigate('#/');
 });
 
 // ---- search ---------------------------------------------------------------
@@ -508,10 +530,15 @@ function openPerson(person: Person): void {
   searchInput.blur();
   // On a tree a hit centres the bubble instead of leaving the map.
   if (shownTree?.has(person.id)) shownTree.highlight(person.id);
-  else location.hash = `#/p/${encodeURIComponent(person.id)}`;
+  else navigate(`#/p/${encodeURIComponent(person.id)}`);
 }
 
-searchInput.addEventListener('input', () => {
+/**
+ * The hits for what is typed, as a listbox the field points into: the focus
+ * stays in the field, the arrow keys move the active hit, and a click or a tap
+ * on a hit opens it — so the options hold no buttons of their own.
+ */
+function search(keep = false): void {
   hits = family.search(searchInput.value, { extra: relationWords });
   if (hits.length === 0) {
     closeResults();
@@ -522,24 +549,25 @@ searchInput.addEventListener('input', () => {
       const item = document.createElement('li');
       item.id = `result-${index}`;
       item.setAttribute('role', 'option');
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'result flex w-full items-baseline justify-between gap-3';
+      const row = document.createElement('div');
+      row.className = 'result flex w-full items-baseline justify-between gap-3';
       const name = document.createElement('span');
       name.textContent = displayName(person);
       const detail = document.createElement('small');
       detail.className = 'opacity-60 tabular-nums text-right';
       detail.textContent = [caption(person), lifespan(person)].filter(Boolean).join(' · ');
-      button.append(name, detail);
-      button.addEventListener('click', () => openPerson(person));
-      item.append(button);
+      row.append(name, detail);
+      item.append(row);
+      item.addEventListener('click', () => openPerson(person));
       return item;
     }),
   );
   results.hidden = false;
   searchInput.setAttribute('aria-expanded', 'true');
-  markActive(0);
-});
+  markActive(keep ? Math.min(active, hits.length - 1) : 0);
+}
+
+searchInput.addEventListener('input', () => search());
 
 searchInput.addEventListener('keydown', (event) => {
   const open = !results.hidden && hits.length > 0;
@@ -614,7 +642,7 @@ function renderMenu(): void {
   entry('file', t().viewFile, '#/file');
   if (source.editable) {
     entry('plus', t().addPerson, () =>
-      openNewPerson(editorContext(), (id) => (location.hash = `#/p/${encodeURIComponent(id)}`)),
+      openNewPerson(editorContext(), (id) => navigate(`#/p/${encodeURIComponent(id)}`)),
     );
   }
   if (canShare()) entry('qr', t().share, () => openShare(location.href));
@@ -669,7 +697,7 @@ function renderMenu(): void {
 async function saveTree(format: 'png' | 'svg'): Promise<void> {
   menu.open = false;
   const overview = shownTree ?? tree;
-  const heading = shownTree ? document.title : family.graph.title;
+  const heading = shownTree ? document.title : familyTitle();
   try {
     const blob = await overview.exportImage(format, heading);
     const link = document.createElement('a');
@@ -701,11 +729,59 @@ function toast(text: string, kind: 'error' | 'success' | 'info' = 'error'): void
   for (const earlier of document.querySelectorAll('.toast-note')) earlier.remove();
   const element = document.createElement('div');
   element.className = `toast-note alert alert-${kind} shadow-lg`;
-  element.setAttribute('role', 'status');
+  // Screen readers hear it from the region that is always there, not from here.
+  element.setAttribute('aria-hidden', 'true');
   element.textContent = text;
   document.body.append(element);
   setTimeout(() => element.remove(), kind === 'error' ? 6000 : 2500);
+  announce(text);
 }
+
+/**
+ * Says `text` through the live region in index.html. A region that is already
+ * there is what screen readers listen to; one appearing with its words in it
+ * often goes unread. Emptied first, so the same words twice are said twice.
+ */
+function announce(text: string): void {
+  const region = document.querySelector('#announcer');
+  if (!region) return;
+  region.textContent = '';
+  setTimeout(() => (region.textContent = text), 50);
+}
+
+// ---- focus after a sheet ------------------------------------------------------
+
+/** What last had the focus on the page, as a selector that finds it again once the page is drawn anew. */
+let lastFocus: string | undefined;
+
+view.addEventListener('focusin', (event) => {
+  lastFocus = focusKey(event.target as Element);
+});
+
+/** The pen on a card, a bubble in the tree, a link — by what stays the same when they are drawn again. */
+function focusKey(element: Element): string | undefined {
+  const keyed = element.closest<HTMLElement | SVGElement>('[data-focus], .node[data-id], a[href]');
+  if (!keyed) return undefined;
+  const { focus, id } = keyed.dataset;
+  if (focus) return `[data-focus="${CSS.escape(focus)}"]`;
+  if (id) return `.node[data-id="${CSS.escape(id)}"]`;
+  return `a[href="${CSS.escape(keyed.getAttribute('href') ?? '')}"]`;
+}
+
+// A closed sheet hands the focus back to what opened it. After a save that
+// one was drawn anew, and the focus would fall to the page itself: it goes to
+// the new one instead.
+document.addEventListener(
+  'close',
+  () => {
+    setTimeout(() => {
+      if (document.querySelector('dialog[open]')) return;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      if (lastFocus) view.querySelector<HTMLElement | SVGElement>(lastFocus)?.focus();
+    });
+  },
+  true,
+);
 
 // ---- editing ----------------------------------------------------------------
 
@@ -718,6 +794,7 @@ function editorContext(): EditorContext {
     save,
     upload,
     caption,
+    fail: (text) => toast(text),
   };
 }
 
@@ -731,7 +808,8 @@ async function upload(image: Blob, name: string): Promise<string | undefined> {
     return saved;
   } catch (error) {
     console.error(error);
-    toast(t().uploadError);
+    // A kind of picture the server does not take says so; anything else is a failed upload.
+    toast(error instanceof UnsupportedImage ? t().unreadable(image instanceof File ? image.name : '') : t().uploadError);
     return undefined;
   }
 }
@@ -742,6 +820,8 @@ async function upload(image: Blob, name: string): Promise<string | undefined> {
  * this edit is lost silently — it just has to be made again.
  */
 async function save(edits: Edit[], message: string): Promise<Record<string, string> | undefined> {
+  // Whatever a check for changes brings back from before this save is older than its result.
+  generation++;
   try {
     const saved = await saveEdits(edits, message);
     followRenames(saved.renamed);
@@ -773,16 +853,23 @@ function followRenames(renamed: Record<string, string>): void {
       return part;
     }
   });
-  history.replaceState(null, '', parts.join('/') || '#/');
+  const before = location.hash;
+  // The state stays: it may be an open sheet's.
+  history.replaceState(history.state, '', parts.join('/') || '#/');
+  // Still the same page, under its new name.
+  if (rendered === before) rendered = location.hash;
   const me = readStored('stammbaum-me');
   if (me && renamed[me]) writeStored('stammbaum-me', renamed[me]);
 }
 
+/** Goes up with every save and every new version on screen, so a late answer can tell it is late. */
+let generation = 0;
+
 /** Puts a new version of the family on screen, wherever one was looking. */
 function useSource(next: FamilySource): void {
+  generation++;
   source = next;
   family = new Family(readFamily(next));
-  title.textContent = family.graph.title;
   const before = tree;
   tree = makeTree();
   // The same family a moment later: stay where one was looking.
@@ -794,8 +881,11 @@ function useSource(next: FamilySource): void {
 // Someone else may have saved while this tab was in the background.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
+  const asked = generation;
   fetchChanges()
     .then((next) => {
+      // A save in the meantime put a newer family on screen than this answer may be.
+      if (generation !== asked) return;
       if (next && (next.version !== source.version || next.editable !== source.editable)) useSource(next);
     })
     .catch(() => undefined);
@@ -844,6 +934,7 @@ function segmented<T extends string>(
 function refresh(): void {
   captions.clear();
   localize();
+  showWarnings();
   tree.localize();
   for (const overview of subtrees.values()) overview.localize();
   render();
@@ -853,6 +944,7 @@ function refresh(): void {
 /** The words that live in index.html and the app bar rather than in a view. */
 function localize(): void {
   document.documentElement.lang = lang();
+  title.textContent = familyTitle();
   document.querySelector('meta[name="description"]')?.setAttribute('content', t().description);
   searchInput.placeholder = t().searchPlaceholder;
   searchInput.setAttribute('aria-label', t().search);
@@ -939,19 +1031,39 @@ function showGestureHint(overview: OverviewView): void {
 
 // ---- parse warnings -------------------------------------------------------
 
-if (family.graph.warnings.length > 0) {
-  const banner = document.createElement('div');
+/** The warnings last closed, so the same ones do not come back with every save. */
+let dismissedWarnings: string | undefined;
+
+function warningsKey(): string {
+  return family.graph.warnings.map((warning) => `${warning.line}|${warning.message}`).join('\n');
+}
+
+/**
+ * The file's warnings, for whoever can do something about them: a note at the
+ * bottom of the screen, built again whenever the family or the language
+ * changes. Closed, it stays closed until the warnings change.
+ */
+function showWarnings(): void {
+  document.querySelector('.warnings')?.remove();
+  const { warnings } = family.graph;
+  if (!source.editable || warnings.length === 0 || warningsKey() === dismissedWarnings) return;
+  const banner = document.createElement('section');
   banner.className = 'warnings alert alert-warning shadow-lg flex-col items-start gap-1';
+  banner.setAttribute('aria-labelledby', 'warnings-heading');
   const heading = document.createElement('strong');
-  heading.textContent = t().warnings(family.graph.warnings.length);
+  heading.id = 'warnings-heading';
+  heading.textContent = t().warnings(warnings.length);
+  const close = iconButton('close', t().closeWarnings);
+  close.classList.add('btn-sm', 'warnings-close');
+  close.addEventListener('click', dismissWarnings);
   const list = document.createElement('ul');
   const shown = 8;
-  for (const warning of family.graph.warnings.slice(0, shown)) {
+  for (const warning of warnings.slice(0, shown)) {
     const item = document.createElement('li');
-    item.textContent = warning.line > 0 ? t().warningLine(warning.line, warning.message) : warning.message;
+    item.textContent = warningText(warning);
     list.append(item);
   }
-  const rest = family.graph.warnings.length - shown;
+  const rest = warnings.length - shown;
   if (rest > 0) {
     const item = document.createElement('li');
     item.textContent = t().moreWarnings(rest);
@@ -962,12 +1074,17 @@ if (family.graph.warnings.length > 0) {
   more.href = '#/missing';
   more.className = 'link font-semibold';
   more.textContent = `${t().missing} →`;
-  banner.append(heading, list, more);
-  banner.addEventListener('click', () => banner.remove());
+  banner.append(heading, close, list, more);
   document.body.append(banner);
 }
 
+function dismissWarnings(): void {
+  dismissedWarnings = warningsKey();
+  document.querySelector('.warnings')?.remove();
+}
+
 localize();
+showWarnings();
 welcome();
 render();
 
@@ -977,7 +1094,7 @@ render();
  * in the background. The bubbles use them from the next visit on.
  */
 async function fillThumbs(): Promise<void> {
-  if (!source.editable) return;
+  if (!source.editable || sparingData()) return;
   for (const name of photosWithoutThumb()) {
     const url = source.photos.get(name);
     if (!url) continue;
@@ -990,6 +1107,59 @@ async function fillThumbs(): Promise<void> {
   }
 }
 setTimeout(() => void fillThumbs(), 4000);
+
+/**
+ * Whether the phone asked to save data, or is on mobile data: every full-size
+ * photo is a lot to download for that. Only some browsers say either.
+ */
+function sparingData(): boolean {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; type?: string } }).connection;
+  return connection?.saveData === true || connection?.type === 'cellular';
+}
+
+/** The family, asked for until it comes: a failed load says so and offers to try again. */
+async function firstSource(): Promise<FamilySource> {
+  const page = must<HTMLElement>('#view');
+  for (;;) {
+    const waiting = document.createElement('p');
+    waiting.className = 'load-state';
+    waiting.setAttribute('role', 'status');
+    waiting.append(spinner(), t().loading);
+    // Only once it takes a moment: a quick answer should not flash past.
+    const slow = setTimeout(() => page.replaceChildren(waiting), 400);
+    try {
+      const loaded = await loadSource();
+      clearTimeout(slow);
+      page.replaceChildren();
+      return loaded;
+    } catch (error) {
+      clearTimeout(slow);
+      console.error(error);
+      await new Promise<void>((retry) => {
+        const failed = document.createElement('div');
+        failed.className = 'load-state';
+        failed.setAttribute('role', 'alert');
+        const text = document.createElement('p');
+        text.textContent = t().loadFailed;
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.className = 'btn btn-primary btn-sm';
+        again.textContent = t().retry;
+        again.addEventListener('click', () => retry());
+        failed.append(text, again);
+        page.replaceChildren(failed);
+        again.focus();
+      });
+    }
+  }
+}
+
+function spinner(): HTMLElement {
+  const element = document.createElement('span');
+  element.className = 'loading loading-spinner loading-sm';
+  element.setAttribute('aria-hidden', 'true');
+  return element;
+}
 
 function must<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);

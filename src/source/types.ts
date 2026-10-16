@@ -26,6 +26,14 @@ export interface Saved {
   renamed: Record<string, string>;
 }
 
+/** The server does not take this kind of picture — one the browser could not turn into a JPEG. */
+export class UnsupportedImage extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnsupportedImage';
+  }
+}
+
 /** Someone else changed the same thing first; `source` is the family as it is now. */
 export class SaveConflict extends Error {
   constructor(

@@ -50,7 +50,7 @@ function familyApiPlugin(): Plugin {
 
 // The hosted app reads the family live from the server (`src/source/live.ts`)
 // and carries none of it in its files. `--mode single` produces one
-// self-contained dist/index.html with the family, script, styles and photos
+// self-contained dist-single/index.html with the family, script, styles and photos
 // inlined (`src/source/bundled.ts`), so it can be mailed around and opened offline.
 export default defineConfig(({ mode }) => ({
   base: './',
@@ -72,6 +72,8 @@ export default defineConfig(({ mode }) => ({
     fs: { allow: [searchForWorkspaceRoot(process.cwd()), familyDir] },
   },
   build: {
+    // A folder of its own, so building the single file leaves the hosted dist/ alone.
+    outDir: mode === 'single' ? 'dist-single' : 'dist',
     // Inline every photo as a data: URI in single-file mode.
     assetsInlineLimit: mode === 'single' ? 100 * 1024 * 1024 : 4096,
     target: 'es2022',

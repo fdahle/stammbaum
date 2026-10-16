@@ -71,7 +71,7 @@ npm run dev          # http://localhost:5173 — editing works here too
 npm test             # parser, writer, server, graph and layout tests
 npm run build        # dist/ and dist-server/ — the app and its small server
 npm start            # serves dist/ with the family from ./data (DATA_DIR=…)
-npm run build:single # dist/index.html — ONE self-contained file, works offline
+npm run build:single # dist-single/index.html — ONE self-contained file, works offline
 ```
 
 To host it, `docker compose up -d --build` builds the app and runs its server
@@ -89,6 +89,7 @@ is logged in.
 | `FAMILY_DIR=./sample` | Mount another folder than `./data` |
 | `STAMMBAUM_EDITORS=jonas,oma` | Only these logins may edit; everyone else reads. Empty: everyone who can log in |
 | `STAMMBAUM_READONLY=1` | Nobody may edit |
+| `STAMMBAUM_PROXY_SECRET` | A long random value the proxy sends along as `X-Stammbaum-Proxy` (see [`deploy/`](deploy/)). Once set, the server answers nobody else — not even another program on the host |
 | `STAMMBAUM_UID`, `STAMMBAUM_GID` | Whose files the server writes (1000:1000) — make them yours, so `data/` stays yours to edit and back up |
 
 ## Editing in the app
@@ -249,6 +250,9 @@ Notes:
 - Ids are the deep-link handles — `#/p/klaus-bauer` opens Klaus directly. The
   app makes them from the whole name, with the year of birth when two share
   it, then a number: `klaus-bauer`, `klaus-bauer-1958`, `klaus-bauer-2`.
+  Cyrillic and Greek names are spelled in Latin letters (*Анна Иванова* is
+  `anna-ivanova`). `person` and `me` are words of the file, never ids, and no
+  id starts with `#`.
 - `nick` wins over the first name in bubbles: the tree says *Oma*, the card
   says *Elisabeth (Oma) Bauer*.
 - Every person in the detail view is captioned with what they are to whoever
@@ -364,9 +368,9 @@ second palette existing anywhere.
 Vite + TypeScript with Tailwind CSS 4 and daisyUI 5 for the styling and the
 theme system; no UI framework and no runtime JavaScript dependencies. Tailwind
 and daisyUI are build-time only, so the offline file still fetches nothing —
-about 111 kB of JavaScript and 126 kB of CSS, both tree-shaken to what the app
+about 157 kB of JavaScript and 140 kB of CSS, both tree-shaken to what the app
 actually uses. Icons are inline SVG, so there is no icon font either. The
-server is about 40 kB of Node with nothing but its standard library, and shares
+server is about 70 kB of Node with nothing but its standard library, and shares
 the parser and the writer with the app.
 
 The overview is one SVG with a transform for pan and zoom, driven by Pointer

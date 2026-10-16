@@ -24,6 +24,9 @@ interface View {
   y: number;
 }
 
+/** Counts the round photo masks drawn, for ids no two of them share. */
+let clips = 0;
+
 /** What a right-click or a long press on the tree was on. */
 export type TreeTarget = { kind: 'person'; id: string } | { kind: 'union'; id: string } | { kind: 'canvas' };
 
@@ -202,6 +205,23 @@ export class OverviewView {
     this.highlighted = id;
   }
 
+  /** Centres `id` when its bubble or its name is not wholly on screen, at the same zoom. */
+  private reveal(id: string): void {
+    const node = this.layout.nodes.get(id);
+    const box = this.svg.getBoundingClientRect();
+    if (!node || box.width === 0) return;
+    const { k, x, y } = this.view;
+    const half = (METRICS.nodeWidth / 2) * k;
+    const margin = 16;
+    const left = x + node.x * k - half;
+    const right = x + node.x * k + half;
+    const top = y + (node.y - METRICS.bubbleRadius - 4) * k;
+    const bottom = y + (node.y + METRICS.bubbleRadius + 60) * k;
+    if (left >= margin && right <= box.width - margin && top >= margin && bottom <= box.height - margin) return;
+    this.positioned = true;
+    this.animateTo({ k, x: box.width / 2 - node.x * k, y: box.height / 2 - node.y * k });
+  }
+
   /** Takes the search ring off again, once the search is no longer what is on screen. */
   unhighlight(): void {
     if (this.highlighted) this.nodeElements.get(this.highlighted)?.classList.remove('is-focused');
@@ -251,8 +271,7 @@ export class OverviewView {
     this.stopMomentum();
     const from = { ...this.view };
     const to = this.clamped(target);
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced || duration === 0) {
+    if (reducedMotion() || duration === 0) {
       this.set(to);
       return;
     }
@@ -424,6 +443,16 @@ export class OverviewView {
       this.openContext(event.clientX, event.clientY);
     });
 
+    // Tabbing to someone off screen brings them into view. A click focuses too,
+    // but what is clicked is already where one is looking.
+    let pointedAt = 0;
+    this.svg.addEventListener('pointerdown', (event) => (pointedAt = event.timeStamp), { capture: true });
+    this.svg.addEventListener('focusin', (event) => {
+      if (event.timeStamp - pointedAt < 1000) return;
+      const id = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+      if (id) this.reveal(id);
+    });
+
     this.svg.addEventListener('keydown', (event) => {
       lastPointer = '';
       const node = (event.target as Element | null)?.closest<SVGGElement>('.node');
@@ -491,7 +520,8 @@ export class OverviewView {
   private flick(velocity: { x: number; y: number }): void {
     let vx = clamp(velocity.x, -4, 4);
     let vy = clamp(velocity.y, -4, 4);
-    if (Math.hypot(vx, vy) < 0.15) return;
+    // Without motion the tree simply stops where it was let go.
+    if (Math.hypot(vx, vy) < 0.15 || reducedMotion()) return;
     let last = performance.now();
     const step = (now: number) => {
       const dt = Math.min(now - last, 32);
@@ -736,7 +766,9 @@ export class OverviewView {
 
     const url = photoUrl(person);
     if (url) {
-      const clipId = `clip-${person.id}`;
+      // Numbered rather than named after the id, which may hold anything a URL
+      // reference trips over — and unique across every tree on the page.
+      const clipId = `tree-clip-${++clips}`;
       const clip = svgEl('clipPath', { id: clipId });
       clip.append(svgEl('circle', { r }));
       group.append(clip);
@@ -909,6 +941,10 @@ function midpoint(pointers: Map<number, Point>): { clientX: number; clientY: num
 
 function mix(previous: number, next: number, weight: number): number {
   return previous * (1 - weight) + next * weight;
+}
+
+function reducedMotion(): boolean {
+  return matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function clamp(value: number, min: number, max: number): number {

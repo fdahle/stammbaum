@@ -67,3 +67,19 @@ person mutter2 "Mutter von Erna"
     expect(duplicates(family).map(([a, b]) => `${a.id}=${b.id}`)).toEqual(['erna=erna2', 'birgit=birgit2']);
   });
 });
+
+describe('people entered twice, in a big family', () => {
+  // 2000 people, a few of them twice — with a birth name, accents or another case.
+  const lines = ['```family'];
+  for (let i = 0; i < 2000; i++) lines.push(`person p${i} "Vorname${i} Nachname${i % 700}"${i % 3 === 0 ? ' sex=f' : ''}${i % 5 === 0 ? ` born=${1900 + (i % 90)}` : ''}`);
+  lines.push('person zoe "Zoë Nachname1"', 'person zoe2 "ZOE nachname1"', 'person anna "Vorname7 Neu" maiden=Nachname7');
+  lines.push('p1 + zoe', '```');
+  const family = new Family(parseFamily(lines.join('\n')));
+
+  it('compares only people who share a name, and finds the same pairs', () => {
+    const started = performance.now();
+    const pairs = duplicates(family).map(([a, b]) => `${a.id}=${b.id}`);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(pairs).toEqual(['p7=anna', 'zoe=zoe2']);
+  });
+});

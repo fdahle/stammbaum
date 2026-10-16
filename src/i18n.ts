@@ -1,5 +1,5 @@
 import type { GapKind } from './missing';
-import type { Sex, UnionStatus } from './parser/types';
+import type { Diagnostic, DiagnosticCode, Sex, UnionStatus } from './parser/types';
 import { readStored, writeStored } from './ui/storage';
 
 /**
@@ -26,6 +26,7 @@ const de = {
   built: (when: string, commit: string) => (commit ? `Erstellt ${when} · Daten ${commit}` : `Erstellt ${when}`),
   asOf: (when: string) => `Stand ${when}`,
 
+  appName: 'Stammbaum',
   description: 'Stammbaum — wer ist noch mal wer?',
   back: 'Zurück zur Übersicht',
   search: 'Person suchen',
@@ -35,6 +36,26 @@ const de = {
   warnings: (count: number) => `${count} ${count === 1 ? 'Hinweis' : 'Hinweise'} in family.md`,
   warningLine: (line: number, message: string) => `Zeile ${line}: ${message}`,
   moreWarnings: (count: number) => `… und ${count} weitere`,
+  closeWarnings: 'Hinweise schließen',
+  diagnostics: {
+    'me-arity': () => '„me“ braucht genau eine Personen-Id',
+    'me-unknown': (p) => `„me“ nennt eine unbekannte Person „${p.id}“`,
+    unrecognised: () => 'Diese Zeile ist nicht zu verstehen',
+    undeclared: (p) => `Keine person-Zeile für „${p.id}“`,
+    'person-id': () => 'Nach „person“ fehlt die Id',
+    duplicate: (p) => `„${p.id}“ steht schon in Zeile ${p.line} — die späteren Angaben gelten`,
+    'person-key': (p) => `Unbekannte Angabe „${p.key}“ bei einer Person`,
+    sex: (p) => `sex= ist m oder f, nicht „${p.value}“`,
+    'relation-start': () => 'Vor „+“ oder „->“ fehlt eine Person',
+    'partner-missing': () => 'Nach „+“ fehlt der zweite Partner',
+    'relation-ids': () => 'Links gehören nur Personen-Ids hin',
+    'relation-key': (p) => `Unbekannte Angabe „${p.key}“ bei einer Partnerschaft`,
+    'key-value': (p) => `Erwartet war schlüssel=wert, nicht „${p.value}“`,
+    'died-before-born': (p) => `„${p.id}“ ist vor der Geburt gestorben`,
+    'born-before-parent': (p) => `„${p.child}“ ist nicht später geboren als der Elternteil „${p.parent}“`,
+    'own-ancestor': (p) => `„${p.id}“ steht unter den eigenen Vorfahren`,
+    'photo-missing': (p) => `Das Foto „${p.name}“ ist nicht in photos/`,
+  } satisfies Record<DiagnosticCode, (params: Record<string, string>) => string>,
 
   menu: 'Einstellungen',
   iAm: 'Ich bin',
@@ -150,6 +171,7 @@ const de = {
   photo: (n: number, of: number) => `Foto ${n} von ${of}`,
   previousPhoto: 'Voriges Foto',
   nextPhoto: 'Nächstes Foto',
+  showPhotos: (name: string) => `Fotos von ${name} ansehen`,
   ancestors: 'Vorfahren',
   descendants: 'Nachkommen',
   relatedTo: 'Verwandt mit …',
@@ -179,6 +201,9 @@ const de = {
   saveConflict: 'Inzwischen hat jemand anderes daran etwas geändert. Die neue Fassung ist geladen — bitte noch einmal.',
   saveError: 'Speichern hat nicht geklappt.',
   loadFailed: 'Der Stammbaum ließ sich nicht laden.',
+  loading: 'Der Stammbaum wird geladen …',
+  retry: 'Noch einmal versuchen',
+  personNotFound: 'Person nicht gefunden',
   relatives: 'Verwandte',
   parent: 'Elternteil',
   partner: 'Partner/in',
@@ -239,6 +264,7 @@ const de = {
   addPhoto: 'Foto hinzufügen',
   uploading: 'Foto wird hochgeladen …',
   uploadError: 'Das Foto ließ sich nicht hochladen.',
+  unreadable: (names: string) => `${names ? `${names}: ` : ''}Dieses Foto kann der Browser nicht lesen (z. B. HEIC) – bitte als JPEG senden.`,
   unknownPerson: 'unbekannt',
   emptyTitle: 'Noch ist niemand im Stammbaum',
   emptyText: 'Fang mit einer Person an — dir selbst, zum Beispiel. Eltern, Partner und Kinder kommen danach über einen Rechtsklick (oder langes Drücken) auf sie dazu.',
@@ -305,6 +331,7 @@ const en: Dict = {
   built: (when, commit) => (commit ? `Built ${when} · data ${commit}` : `Built ${when}`),
   asOf: (when) => `As of ${when}`,
 
+  appName: 'Family tree',
   description: 'Family tree — who was who again?',
   back: 'Back to the tree',
   search: 'Find a person',
@@ -314,6 +341,26 @@ const en: Dict = {
   warnings: (count) => `${count} ${count === 1 ? 'note' : 'notes'} on family.md`,
   warningLine: (line, message) => `Line ${line}: ${message}`,
   moreWarnings: (count) => `… and ${count} more`,
+  closeWarnings: 'Close the notes',
+  diagnostics: {
+    'me-arity': () => '"me" needs exactly one person id',
+    'me-unknown': (p) => `"me" names an unknown person "${p.id}"`,
+    unrecognised: () => 'This line makes no sense to the app',
+    undeclared: (p) => `No person line for "${p.id}"`,
+    'person-id': () => '"person" needs an id',
+    duplicate: (p) => `"${p.id}" is already on line ${p.line} — the later values win`,
+    'person-key': (p) => `Unknown person attribute "${p.key}"`,
+    sex: (p) => `sex= is m or f, not "${p.value}"`,
+    'relation-start': () => 'A person is missing before "+" or "->"',
+    'partner-missing': () => '"+" without a second partner',
+    'relation-ids': () => 'Only person ids belong on the left',
+    'relation-key': (p) => `Unknown partnership attribute "${p.key}"`,
+    'key-value': (p) => `Expected key=value, got "${p.value}"`,
+    'died-before-born': (p) => `"${p.id}" died before they were born`,
+    'born-before-parent': (p) => `"${p.child}" is born no later than their parent "${p.parent}"`,
+    'own-ancestor': (p) => `"${p.id}" ends up among their own ancestors`,
+    'photo-missing': (p) => `The photo "${p.name}" is not in photos/`,
+  },
 
   menu: 'Settings',
   iAm: 'I am',
@@ -427,6 +474,7 @@ const en: Dict = {
   photo: (n, of) => `Photo ${n} of ${of}`,
   previousPhoto: 'Previous photo',
   nextPhoto: 'Next photo',
+  showPhotos: (name) => `View the photos of ${name}`,
   ancestors: 'Ancestors',
   descendants: 'Descendants',
   relatedTo: 'Related to …',
@@ -456,6 +504,9 @@ const en: Dict = {
   saveConflict: 'Someone else changed this in the meantime. Their version is loaded now — please try again.',
   saveError: 'Saving did not work.',
   loadFailed: 'The family tree could not be loaded.',
+  loading: 'Loading the family tree …',
+  retry: 'Try again',
+  personNotFound: 'Person not found',
   relatives: 'Relatives',
   parent: 'Parent',
   partner: 'Partner',
@@ -516,6 +567,7 @@ const en: Dict = {
   addPhoto: 'Add a photo',
   uploading: 'Uploading the photo …',
   uploadError: 'The photo could not be uploaded.',
+  unreadable: (names) => `${names ? `${names}: ` : ''}This browser can't read this photo (e.g. HEIC) — please use a JPEG.`,
   unknownPerson: 'unknown',
   emptyTitle: 'Nobody in the tree yet',
   emptyText: 'Start with one person — yourself, say. Parents, partners and children follow with a right-click (or press and hold) on them.',
@@ -603,4 +655,11 @@ function initialLang(): Lang {
   if (typeof navigator === 'undefined') return 'de';
   const preferred = navigator.languages?.[0] ?? navigator.language ?? 'de';
   return preferred.toLowerCase().startsWith('de') ? 'de' : 'en';
+}
+
+/** A warning about family.md in the current language, with its line when it has one. */
+export function warningText(warning: Diagnostic): string {
+  const say = warning.code ? t().diagnostics[warning.code] : undefined;
+  const text = say ? say(warning.params ?? {}) : warning.message;
+  return warning.line > 0 ? t().warningLine(warning.line, text) : text;
 }

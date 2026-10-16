@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { closeOnBack } from './back';
 import { iconButton } from './icons';
 
 const MAX_ZOOM = 5;
@@ -176,6 +177,7 @@ export function openLightbox(urls: string[], start: number, alt: string): void {
   show(start);
   document.body.append(dialog);
   dialog.showModal();
+  closeOnBack(dialog);
 }
 
 function spread(pointers: Map<number, { x: number; y: number }>): number {

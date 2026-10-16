@@ -63,6 +63,16 @@ describe('birthdays on 29 February', () => {
     expect(hasBirthday(leap, on(2028, 2, 29))).toBe(true);
     expect(hasBirthday(leap, on(2028, 2, 28))).toBe(false);
   });
+
+  it('make someone a year older on the day the birthday is kept', () => {
+    // The birthday note, the calendar and the age all say 27 on 28 February 2027.
+    expect(ageOf(leap, on(2027, 2, 28))).toEqual({ years: 27, approx: false, final: false });
+    expect(ageOf(leap, on(2027, 2, 27))).toEqual({ years: 26, approx: false, final: false });
+    expect(ageOf(leap, on(2028, 2, 28))).toEqual({ years: 27, approx: false, final: false });
+    expect(ageOf(leap, on(2028, 2, 29))).toEqual({ years: 28, approx: false, final: false });
+    // A wedding on 29 February has its years on the 28th as well.
+    expect(yearsBetween(on(2004, 2, 29), on(2029, 2, 28))).toEqual({ years: 25, approx: false });
+  });
 });
 
 describe('lifespan', () => {

@@ -95,3 +95,31 @@ person leon "Leon Dahle" sex=m born=2024-12-10  %% der Kleine`);
     expect(tidyText(markdown)).toBe(markdown);
   });
 });
+
+describe('a couple who were partners twice', () => {
+  /** Every partnership with its dates — a couple's in the order the file has them. */
+  const unions = (markdown: string) =>
+    parseFamily(markdown)
+      .unions.map(({ partners, married, divorced, together, separated, children }) => ({
+        partners: [...partners].sort(),
+        married,
+        divorced,
+        together,
+        separated,
+        children,
+      }))
+      .sort((a, b) => a.partners.join().localeCompare(b.partners.join()));
+
+  it.each([
+    ['an unknown first wedding', 'a + b married=? divorced=? -> c1\na + b married=2001 -> c2'],
+    ['a date that is not a date', 'a + b married="Mai 1980" divorced=1990 -> c1\na + b married=1979 -> c2'],
+    ['the earlier one dated later', 'a + b married=2005 divorced=2006 -> c1\na + b married=2001 -> c2'],
+    ['someone else in between', 'a + b married=? divorced=1990 -> c1\na + x married=1991 divorced=1995\na + b married=2000 -> c2'],
+  ])('keeps both, in their order, with %s', (_, relations) => {
+    const file = `\`\`\`family\nperson a "A"\nperson b "B"\nperson x "X"\nperson c1 "C1"\nperson c2 "C2"\n${relations}\n\`\`\``;
+    const tidy = tidyText(file);
+    expect(unions(tidy)).toEqual(unions(file));
+    expect(unions(tidy).filter((u) => u.partners.join() === 'a,b')).toHaveLength(2);
+    expect(tidyText(tidy)).toBe(tidy);
+  });
+});

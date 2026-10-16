@@ -112,12 +112,22 @@ export function duplicates(family: Family): Array<[Person, Person]> {
     );
 
   const people = family.people().filter((person) => !isStandIn(person) && !person.stub);
+  // Only people who share a name are compared — by name, not everyone with everyone.
+  const keys = people.map(names);
+  const byName = new Map<string, number[]>();
+  keys.forEach((own, i) => {
+    for (const name of new Set(own)) {
+      const list = byName.get(name);
+      if (list) list.push(i);
+      else byName.set(name, [i]);
+    }
+  });
   const pairs: Array<[Person, Person]> = [];
   for (let i = 0; i < people.length; i++) {
-    for (let j = i + 1; j < people.length; j++) {
+    const alike = new Set(keys[i]!.flatMap((name) => byName.get(name)!.filter((j) => j > i)));
+    for (const j of [...alike].sort((x, y) => x - y)) {
       const a = people[i]!;
       const b = people[j]!;
-      if (!names(a).some((name) => names(b).includes(name))) continue;
       if (a.sex && b.sex && a.sex !== b.sex) continue;
       if (year(a) && year(b) && year(a) !== year(b)) continue;
       if (related(a, b)) continue;

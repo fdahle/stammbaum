@@ -18,6 +18,8 @@ export interface EditorContext {
   /** Puts a picture into photos/ under a name built from `name`; resolves to the file name, or `undefined` when it failed. */
   upload(image: Blob, name: string): Promise<string | undefined>;
   caption(person: Person): string | undefined;
+  /** Says briefly that something did not work. */
+  fail(text: string): void;
 }
 
 /** What the person form asks for; the pictures have their own section. */
@@ -304,15 +306,33 @@ export async function addPhotos(person: Person, context: EditorContext, thenEdit
     if (cropped !== 'whole') files[0] = new File([cropped], 'cropped.jpg', { type: cropped.type });
   }
   const added: string[] = [];
+  /** Pictures this browser cannot draw — a HEIC, say — and so cannot shrink: they stay on the device. */
+  const unreadable: string[] = [];
   for (const file of files) {
-    const name = await context.upload(await shrink(file), person.id);
+    let image: Blob;
+    try {
+      image = await shrink(file);
+    } catch (error) {
+      console.error(error);
+      unreadable.push(file.name);
+      continue;
+    }
+    const name = await context.upload(image, person.id);
     if (!name) break;
     added.push(name);
   }
-  if (added.length === 0) return;
+  // Said last, so the message about the others does not cover it.
+  const skipped = () => {
+    if (unreadable.length > 0) context.fail(t().unreadable(unreadable.join(', ')));
+  };
+  if (added.length === 0) {
+    skipped();
+    return;
+  }
   const names = person.photo ? [...photoNames(person), ...added] : [added[0]!, ...(person.photos ?? []), ...added.slice(1)];
   const { set, was } = photoChanges(person, names);
   const saved = await context.save([{ kind: 'person', id: person.id, set, was }], t().msg.photosAdded(person.name, added.length));
+  skipped();
   if (saved && thenEdit) reopen(person.id, context);
 }
 
@@ -341,6 +361,7 @@ export function openNewPerson(context: EditorContext, done: (id: string) => void
   const sheet = openSheet(t().newPerson);
   const form = personForm(undefined);
   const add = button(t().add, 'btn-primary', () => {
+    let id: string | undefined;
     void submit(sheet, add, async () => {
       const values = form.read();
       if (typeof values === 'string') {
@@ -348,8 +369,11 @@ export function openNewPerson(context: EditorContext, done: (id: string) => void
         return false;
       }
       const created = await context.save([{ kind: 'add-person', ref: '$new', set: values }], t().msg.added(values.name!));
-      if (created?.$new) done(created.$new);
+      id = created?.$new;
       return !!created;
+    }).then(() => {
+      // Once the sheet is closed: where it leads goes on top of the page, not of the sheet.
+      if (id) done(id);
     });
   });
   sheet.body.append(form.element, sheetActions(add));

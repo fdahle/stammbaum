@@ -116,15 +116,18 @@ export function today(now = new Date()): DateParts {
 /**
  * Whole years from `from` to `until`. With only a year on either side the
  * birthday may or may not have passed yet, so the answer is marked `approx`.
+ * A year counts as full on the day the date comes round — a 29 February on
+ * the 28th in other years, as for the birthday itself.
  */
 export function yearsBetween(from: DateParts, until: DateParts): { years: number; approx: boolean } | undefined {
   let years = until.y - from.y;
   let approx = false;
+  const day = from.d === undefined ? undefined : anniversaryIn(from, until.y).d;
   if (from.m === undefined || until.m === undefined) approx = true;
   else if (until.m < from.m) years--;
   else if (until.m === from.m) {
-    if (from.d === undefined || until.d === undefined) approx = true;
-    else if (until.d < from.d) years--;
+    if (day === undefined || until.d === undefined) approx = true;
+    else if (until.d < day) years--;
   }
   return years < 0 ? undefined : { years, approx };
 }

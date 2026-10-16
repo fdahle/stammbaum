@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { closeOnBack } from './back';
 import { iconButton } from './icons';
 
 export interface Sheet {
@@ -45,6 +46,7 @@ export function openSheet(title: string, onClose?: () => void): Sheet {
   });
   document.body.append(dialog);
   dialog.showModal();
+  closeOnBack(dialog);
   return { body, close: () => dialog.close() };
 }
 

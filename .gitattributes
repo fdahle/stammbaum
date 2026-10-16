@@ -1,0 +1,2 @@
+# LF everywhere, also on Windows: the tests compare the sample family line by line.
+* text=auto eol=lf

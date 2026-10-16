@@ -186,14 +186,30 @@ function focusCard(
 ): HTMLElement {
   const card = document.createElement('div');
   card.className = `focus-card card bg-base-100 shadow-sm${isDeceased(person) ? ' is-deceased' : ''}`;
+  const pictures = galleryUrls(person);
   const portrait = bubble(person);
-  card.append(portrait);
+  if (pictures.length > 0) {
+    // A real button, so the photos open from the keyboard too; it looks like the bubble it holds.
+    const zoom = document.createElement('button');
+    zoom.type = 'button';
+    zoom.className = `${portrait.className} is-zoomable`;
+    zoom.style.cssText = portrait.style.cssText;
+    zoom.dataset.focus = 'portrait';
+    zoom.setAttribute('aria-label', t().showPhotos(person.name));
+    zoom.append(...portrait.childNodes);
+    zoom.addEventListener('click', () => openLightbox(pictures, 0, person.name));
+    card.append(zoom);
+  } else {
+    card.append(portrait);
+  }
   // Editing sits quietly in the corner, for whoever may.
   const { edit } = context;
   if (edit) {
     const pen = document.createElement('button');
     pen.type = 'button';
     pen.className = 'focus-edit btn btn-ghost btn-circle btn-sm';
+    // Found again by this after a save draws the card anew.
+    pen.dataset.focus = 'edit';
     pen.title = t().edit;
     pen.setAttribute('aria-label', t().editTitle(person.name));
     pen.append(icon('pencil'));
@@ -239,11 +255,6 @@ function focusCard(
   if (family.adopted(person.id)) card.append(line('focus-adopted', t().adopted));
   if (person.note) card.append(line('focus-note', person.note));
 
-  const pictures = galleryUrls(person);
-  if (pictures.length > 0) {
-    portrait.classList.add('is-zoomable');
-    portrait.addEventListener('click', () => openLightbox(pictures, 0, person.name));
-  }
   if (pictures.length > 1) {
     const gallery = document.createElement('div');
     gallery.className = 'focus-gallery';

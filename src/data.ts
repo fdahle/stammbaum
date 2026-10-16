@@ -17,7 +17,13 @@ export function readFamily(source: FamilySource): FamilyGraph {
   for (const person of graph.people.values()) {
     for (const name of [person.photo, ...(person.photos ?? [])]) {
       if (name && !photoByName(name)) {
-        graph.warnings.push({ line: person.line ?? 0, message: `photo "${name}" is not in photos/`, text: name });
+        graph.warnings.push({
+          line: person.line ?? 0,
+          message: `photo "${name}" is not in photos/`,
+          text: name,
+          code: 'photo-missing',
+          params: { name },
+        });
       }
     }
   }
