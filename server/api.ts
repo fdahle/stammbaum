@@ -76,8 +76,8 @@ const THUMB_SIZE = 512 * 1024;
 const MAX_EDITS = 50;
 /** How long the rest of a body that is too large is waited out before the connection closes. */
 const LINGER = 2000;
-/** How many earlier versions of family.md history/ keeps. */
-const KEEP_COPIES = 50;
+/** How many earlier versions of family.md history/ keeps: a busy evening of relatives editing is a few hundred. */
+const KEEP_COPIES = 1000;
 
 type Next = () => void;
 

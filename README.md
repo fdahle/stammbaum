@@ -154,7 +154,7 @@ stay as they were, so the file reads as if written by hand — and can still be
 edited by hand.
 
 Before each save the server puts the previous `family.md` into
-`data/history/`, named by the time — the newest 50 are kept — and adds a line to
+`data/history/`, named by the time — the newest 1000 are kept — and adds a line to
 `data/history/changes.log` saying who changed what:
 
 ```
