@@ -20,28 +20,32 @@ export function pickImages(): Promise<File[]> {
 /**
  * A phone's photo, turned upright, at most MAX_SIDE across and as a JPEG —
  * which also leaves behind what the camera wrote into it, such as where it
- * was taken. A GIF stays as it is, and so does anything the browser cannot
- * draw; the server says whether it takes it.
+ * was taken. A GIF stays as it is. Anything the browser cannot draw (HEIC,
+ * say) is an error rather than sent as it is, with where it was taken still
+ * in it.
  */
 export async function shrink(file: File): Promise<Blob> {
   if (file.type === 'image/gif') return file;
+  const unreadable = () => new Error(`${file.name || 'The picture'} cannot be read by this browser, so it is not uploaded`);
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => {
+    throw unreadable();
+  });
   try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
     const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
     const context = canvas.getContext('2d');
-    if (!context) return file;
+    if (!context) throw unreadable();
     // A transparent PNG would turn black as a JPEG.
     context.fillStyle = '#fff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-    return blob ?? file;
-  } catch {
-    return file;
+    if (!blob) throw unreadable();
+    return blob;
+  } finally {
+    bitmap.close();
   }
 }
 

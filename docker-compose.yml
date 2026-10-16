@@ -16,6 +16,8 @@ services:
     volumes:
       # `FAMILY_DIR=./sample` to try it with the made-up family.
       - ${FAMILY_DIR:-./data}:/data
+    # A small init as PID 1, so `docker stop` reaches the server and it can finish a save.
+    init: true
     # Writes as your own user, so the files in data/ stay yours to edit and back up.
     user: "${STAMMBAUM_UID:-1000}:${STAMMBAUM_GID:-1000}"
     environment:
@@ -23,4 +25,7 @@ services:
       STAMMBAUM_EDITORS: ${STAMMBAUM_EDITORS:-}
       # 1 makes the family read-only for everyone.
       STAMMBAUM_READONLY: ${STAMMBAUM_READONLY:-}
+      # The proxy's X-Stammbaum-Proxy header has to carry this, or nothing is
+      # answered — see deploy/. Empty: whatever reaches the port is trusted.
+      STAMMBAUM_PROXY_SECRET: ${STAMMBAUM_PROXY_SECRET:-}
     restart: unless-stopped
