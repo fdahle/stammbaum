@@ -1,6 +1,6 @@
 import { assignGenerations } from '../layout/layout';
-import { attributeSpans, parseFamily, stripComment, tokenize } from './parse';
-import { unionStart, type FamilyGraph, type Union } from './types';
+import { attributeSpans, declares, parseFamily, stripComment, tokenize } from './parse';
+import { unionId, unionStart, type FamilyGraph, type Union } from './types';
 
 /**
  * family.md in a fixed order, the way the tree reads: one section per
@@ -56,12 +56,13 @@ export function tidyText(markdown: string): string {
       }
       const entry = { text, notes };
       notes = [];
-      const [first, second] = tokenize(code);
-      if (first && !first.quoted && first.value === 'person' && second) {
+      const tokens = tokenize(code);
+      const second = tokens[1];
+      if (declares(tokens, 'person') && second) {
         people.set(second.value, [...(people.get(second.value) ?? []), entry]);
-      } else if (first && !first.quoted && first.value === 'me') {
+      } else if (declares(tokens, 'me')) {
         me = entry;
-      } else if (tokenize(code).some((t) => !t.quoted && (t.value === '+' || t.value === '->' || /^(children|adopted)=/.test(t.value)))) {
+      } else if (tokens.some((t) => !t.quoted && (t.value === '+' || t.value === '->' || /^(children|adopted)=/.test(t.value)))) {
         relations.push(entry);
       } else {
         others.push(entry);
@@ -181,18 +182,33 @@ function familyOrder(graph: FamilyGraph): string[] {
   return order;
 }
 
-/** Someone's partnerships, the earliest first; lone-parent lines last. */
+/**
+ * Someone's partnerships, the earliest first; lone-parent lines last. Two
+ * with the same partner keep the order they were written in, whatever their
+ * dates say — in the other order they would read as one partnership.
+ */
 function unionsOf(graph: FamilyGraph, id: string): Union[] {
   const other = (u: Union) => u.partners.find((p) => p !== id) ?? '';
-  return graph.unions
-    .filter((u) => u.partners.includes(id))
-    .sort(
-      (a, b) =>
-        Number(a.partners.length === 1) - Number(b.partners.length === 1) ||
-        (unionStart(a) ?? '9999').localeCompare(unionStart(b) ?? '9999') ||
-        other(a).localeCompare(other(b)) ||
-        a.id.localeCompare(b.id),
-    );
+  const mine = graph.unions.filter((u) => u.partners.includes(id));
+  const index = new Map(mine.map((u, i) => [u, i]));
+  // A later partnership with the same partner never sorts before an earlier one.
+  const start = new Map<Union, string>();
+  const latest = new Map<string, string>();
+  for (const union of mine) {
+    const pair = unionId(union.partners);
+    const own = unionStart(union) ?? '9999';
+    const before = latest.get(pair);
+    const key = before !== undefined && before.localeCompare(own) > 0 ? before : own;
+    start.set(union, key);
+    latest.set(pair, key);
+  }
+  return mine.sort(
+    (a, b) =>
+      Number(a.partners.length === 1) - Number(b.partners.length === 1) ||
+      start.get(a)!.localeCompare(start.get(b)!) ||
+      other(a).localeCompare(other(b)) ||
+      index.get(a)! - index.get(b)!,
+  );
 }
 
 /** `person <id> "<Name>" <the rest>`, split so the columns can line up. */

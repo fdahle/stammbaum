@@ -100,11 +100,38 @@ export function unionEnd(union: Union): string | undefined {
   return knownDate(union.divorced) ?? knownDate(union.separated);
 }
 
+/** What a warning is about, for the app to say in its own language. */
+export type DiagnosticCode =
+  | 'me-arity'
+  | 'me-unknown'
+  | 'unrecognised'
+  | 'undeclared'
+  | 'person-id'
+  | 'duplicate'
+  | 'person-key'
+  | 'sex'
+  | 'relation-start'
+  | 'partner-missing'
+  | 'relation-ids'
+  | 'relation-key'
+  | 'key-value'
+  | 'died-before-born'
+  | 'born-before-parent'
+  | 'own-ancestor'
+  | 'photo-missing';
+
 export interface Diagnostic {
   line: number;
+  /** In English — for the server, the tests, and any warning without a `code`. */
   message: string;
   text: string;
+  code?: DiagnosticCode | undefined;
+  /** The names and values the message mentions, by name. */
+  params?: Record<string, string> | undefined;
 }
+
+/** How the parser reports a warning on the line it is reading. */
+export type Warn = (message: string, code?: DiagnosticCode, params?: Record<string, string>) => void;
 
 export interface FamilyGraph {
   title: string;

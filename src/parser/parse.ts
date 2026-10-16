@@ -1,4 +1,13 @@
-import { type Diagnostic, type FamilyGraph, type Person, type Sex, type Union, unionId } from './types';
+import {
+  type Diagnostic,
+  type DiagnosticCode,
+  type FamilyGraph,
+  type Person,
+  type Sex,
+  type Union,
+  type Warn,
+  unionId,
+} from './types';
 
 /**
  * Parses the mermaid-flavoured family DSL out of a markdown document.
@@ -35,9 +44,9 @@ export function parseFamily(markdown: string): FamilyGraph {
     const tokens = tokenize(code);
     if (tokens.length === 0) continue;
     const text = code.trim();
-    const warn = (message: string) => warnings.push({ line, message, text });
+    const warn: Warn = (message, code, params) => void warnings.push({ line, message, text, code, params });
 
-    if (!tokens[0]!.quoted && tokens[0]!.value === 'person') {
+    if (declares(tokens, 'person')) {
       readPerson(tokens, line, people, warn);
     } else if (
       tokens.some(
@@ -48,10 +57,10 @@ export function parseFamily(markdown: string): FamilyGraph {
     ) {
       readRelation(tokens, line, unions, warn);
     } else if (!tokens[0]!.quoted && tokens[0]!.value === 'me') {
-      if (tokens.length !== 2) warn('"me" needs exactly one person id');
+      if (tokens.length !== 2) warn('"me" needs exactly one person id', 'me-arity');
       else me = { id: tokens[1]!.value, line, text };
     } else {
-      warn('unrecognised statement');
+      warn('unrecognised statement', 'unrecognised');
     }
   }
 
@@ -61,13 +70,15 @@ export function parseFamily(markdown: string): FamilyGraph {
     for (const id of [...union.partners, ...union.children]) {
       if (!people.has(id)) {
         people.set(id, { id, name: id, stub: true });
-        warnings.push({ line: 0, message: `no "person" declaration for "${id}"`, text: id });
+        warnings.push({ line: 0, message: `no "person" declaration for "${id}"`, text: id, code: 'undeclared', params: { id } });
       }
     }
   }
 
   if (me && people.has(me.id)) graph.me = me.id;
-  else if (me) warnings.push({ line: me.line, message: `"me" names unknown person "${me.id}"`, text: me.text });
+  else if (me) {
+    warnings.push({ line: me.line, message: `"me" names unknown person "${me.id}"`, text: me.text, code: 'me-unknown', params: { id: me.id } });
+  }
 
   graph.unions = unions.all();
   check(graph);
@@ -98,6 +109,16 @@ class Unions {
   all(): Union[] {
     return [...this.byId.values()];
   }
+}
+
+/**
+ * Whether a statement starts with the keyword `person` or `me` — and is not
+ * a relation of someone who happens to have that id: `person + anna`.
+ */
+export function declares(tokens: Token[], keyword: 'person' | 'me'): boolean {
+  const [first, second] = tokens;
+  if (!first || first.quoted || first.value !== keyword) return false;
+  return !second || second.quoted || !(second.value === '+' || second.value === '->' || /^(children|adopted)=/.test(second.value));
 }
 
 /** Began and ended — so another `married=` or `together=` means they began again. */
@@ -163,14 +184,17 @@ const SEXES = new Map<string, Sex>([
 ]);
 const UNION_KEYS = new Set(['married', 'divorced', 'together', 'separated', 'children', 'adopted']);
 
-function readPerson(tokens: Token[], line: number, people: Map<string, Person>, warn: (m: string) => void): void {
+function readPerson(tokens: Token[], line: number, people: Map<string, Person>, warn: Warn): void {
   const id = tokens[1]?.value;
   if (!id) {
-    warn('person needs an id');
+    warn('person needs an id', 'person-id');
     return;
   }
   const earlier = people.get(id);
-  if (earlier) warn(`"${id}" was already declared on line ${earlier.line ?? '?'} — the later values win`);
+  if (earlier) {
+    const first = String(earlier.line ?? '?');
+    warn(`"${id}" was already declared on line ${first} — the later values win`, 'duplicate', { id, line: first });
+  }
   const person: Person = earlier ?? { id, name: id, line };
   people.set(id, person);
 
@@ -183,13 +207,13 @@ function readPerson(tokens: Token[], line: number, people: Map<string, Person>, 
   }
   for (const [key, value] of attributes(rest, warn)) {
     if (!PERSON_KEYS.has(key)) {
-      warn(`unknown person attribute "${key}"`);
+      warn(`unknown person attribute "${key}"`, 'person-key', { key });
       continue;
     }
     if (key === 'sex') {
       const sex = SEXES.get(value.toLowerCase());
       if (sex) person.sex = sex;
-      else warn(`sex must be m or f, got "${value}"`);
+      else warn(`sex must be m or f, got "${value}"`, 'sex', { value });
       continue;
     }
     if (key === 'photos') {
@@ -200,7 +224,7 @@ function readPerson(tokens: Token[], line: number, people: Map<string, Person>, 
   }
 }
 
-function readRelation(tokens: Token[], line: number, unions: Unions, warn: (m: string) => void): void {
+function readRelation(tokens: Token[], line: number, unions: Unions, warn: Warn): void {
   const arrow = tokens.findIndex((t) => !t.quoted && t.value === '->');
   const left = arrow === -1 ? tokens : tokens.slice(0, arrow);
   let right = arrow === -1 ? [] : tokens.slice(arrow + 1);
@@ -211,7 +235,7 @@ function readRelation(tokens: Token[], line: number, unions: Unions, warn: (m: s
 
   const first = left[0];
   if (!first || (!first.quoted && first.value === '+')) {
-    warn('relation needs a person before "+" or "->"');
+    warn('relation needs a person before "+" or "->"', 'relation-start');
     return;
   }
   const partners: string[] = [first.value];
@@ -219,14 +243,14 @@ function readRelation(tokens: Token[], line: number, unions: Unions, warn: (m: s
   if (rest[0] && !rest[0].quoted && rest[0].value === '+') {
     const second = rest[1];
     if (!second) {
-      warn('"+" without a second partner');
+      warn('"+" without a second partner', 'partner-missing');
       return;
     }
     partners.push(second.value);
     rest = rest.slice(2);
   }
   if (partners.some((p) => p === '' || p === '+' || p.includes('='))) {
-    warn('relation needs plain person ids on the left');
+    warn('relation needs plain person ids on the left', 'relation-ids');
     return;
   }
 
@@ -243,7 +267,7 @@ function readRelation(tokens: Token[], line: number, unions: Unions, warn: (m: s
 
   for (const [key, value] of pairs) {
     if (!UNION_KEYS.has(key)) {
-      warn(`unknown relation attribute "${key}"`);
+      warn(`unknown relation attribute "${key}"`, 'relation-key', { key });
       continue;
     }
     if (key === 'children') children.push(...list(value));
@@ -268,9 +292,9 @@ function list(value: string): string[] {
     .filter(Boolean);
 }
 
-function attributes(tokens: Token[], warn: (m: string) => void): Array<[string, string]> {
+function attributes(tokens: Token[], warn: Warn): Array<[string, string]> {
   const { found, stray } = attributeSpans(tokens);
-  for (const token of stray) warn(`expected key=value, got "${token.value}"`);
+  for (const token of stray) warn(`expected key=value, got "${token.value}"`, 'key-value', { value: token.value });
   return found.map(({ key, value }) => [key, value]);
 }
 
@@ -293,10 +317,11 @@ export function attributeSpans(tokens: Token[]): { found: Attribute[]; stray: To
     const token = tokens[i]!;
     const eq = token.quoted ? -1 : token.value.indexOf('=');
     if (eq <= 0) {
-      // `children=a, b` — a list continued after a space.
+      // `children=a, b` — a list continued after a space; `note=Hallo, Welt`
+      // keeps its space.
       const previous = found[found.length - 1];
       if (previous && previous.value.endsWith(',')) {
-        previous.value += token.value;
+        previous.value += ` ${token.value}`;
         previous.end = token.end;
       } else stray.push(token);
       continue;
@@ -358,13 +383,13 @@ function firstHeading(markdown: string): string | undefined {
  * typo in a date or an id.
  */
 function check(graph: FamilyGraph): void {
-  const warn = (person: Person, message: string) =>
-    graph.warnings.push({ line: person.line ?? 0, message, text: person.id });
+  const warn = (person: Person, message: string, code: DiagnosticCode, params: Record<string, string>) =>
+    graph.warnings.push({ line: person.line ?? 0, message, text: person.id, code, params });
 
   for (const person of graph.people.values()) {
     const born = yearOf(person.born);
     const died = yearOf(person.died);
-    if (born !== undefined && died !== undefined && died < born) warn(person, `"${person.id}" died before they were born`);
+    if (born !== undefined && died !== undefined && died < born) warn(person, `"${person.id}" died before they were born`, 'died-before-born', { id: person.id });
   }
 
   const parentsOf = new Map<string, string[]>();
@@ -378,7 +403,7 @@ function check(graph: FamilyGraph): void {
       for (const parent of union.partners) {
         const parentBorn = yearOf(graph.people.get(parent)?.born);
         if (parentBorn !== undefined && born <= parentBorn) {
-          warn(person, `"${child}" is born no later than their parent "${parent}"`);
+          warn(person, `"${child}" is born no later than their parent "${parent}"`, 'born-before-parent', { child, parent });
         }
       }
     }
@@ -389,7 +414,7 @@ function check(graph: FamilyGraph): void {
     const queue = [...(parentsOf.get(person.id) ?? [])];
     for (const id of queue) {
       if (id === person.id) {
-        warn(person, `"${person.id}" ends up among their own ancestors`);
+        warn(person, `"${person.id}" ends up among their own ancestors`, 'own-ancestor', { id: person.id });
         break;
       }
       if (seen.has(id)) continue;

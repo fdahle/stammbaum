@@ -356,3 +356,86 @@ describe('one person entered twice', () => {
     expect(parseFamily(markdown).unions.find((u) => u.partners.includes('a') && u.partners.includes('b'))?.children).toEqual(['c', 'd']);
   });
 });
+
+describe('names that give no id of their own', () => {
+  it('never makes an id that reads as a keyword, and spells out Cyrillic and Greek', () => {
+    const { created, markdown } = apply(
+      { kind: 'add-person', ref: '$a', set: { name: 'Person' } },
+      { kind: 'add-person', ref: '$b', set: { name: 'Me' } },
+      { kind: 'add-person', ref: '$c', set: { name: 'Анна Иванова' } },
+      { kind: 'add-person', ref: '$d', set: { name: 'Νίκος Παπαδόπουλος' } },
+      { kind: 'add-person', ref: '$e', set: { name: '李明', born: '1990' } },
+      { kind: 'add-person', ref: '$f', set: { name: '王芳' } },
+      { kind: 'add-partnership', partners: ['$a', '$b'], set: {} },
+    );
+    expect(created).toEqual({ $a: 'person-2', $b: 'me-2', $c: 'anna-ivanova', $d: 'nikos-papadopoulos', $e: 'person-1990', $f: 'person-3' });
+    expect(parseFamily(markdown).unions.at(-1)?.partners).toEqual(['person-2', 'me-2']);
+  });
+
+  it('refuses an id the parser would read as a keyword or a comment', () => {
+    for (const to of ['person', 'me', '#felix', '%%felix']) {
+      expect(() => apply({ kind: 'rename-id', id: 'jonas', to })).toThrow(EditError);
+    }
+  });
+
+  it('gives the `person` an earlier version made a proper id when tidying', () => {
+    const file = '```family\nperson person "Анна Иванова"\nperson b "B"\nperson + b -> kind\n```\n';
+    const { markdown, renamed } = applyEdits(file, [{ kind: 'tidy' }]);
+    expect(renamed).toMatchObject({ person: 'anna-ivanova' });
+    expect(parseFamily(markdown).unions[0]?.partners).toEqual(['anna-ivanova', 'b']);
+  });
+});
+
+describe('a couple who were partners twice, edited', () => {
+  const file = '```family\nperson a "A"\nperson b "B"\na + b married=1980 divorced=1990 -> c\na + b married=2000 -> d\n```\n';
+  const unions = (markdown: string) => parseFamily(markdown).unions.map((u) => [u.id, u.married, u.divorced, u.children]);
+
+  it('refuses to take the end out of the first, which would make the two one', () => {
+    expect(() => applyEdits(file, [{ kind: 'partnership', union: 'a+b', set: { divorced: null } }])).toThrow(/end/);
+  });
+
+  it('keeps a marriage without a date apart from the other', () => {
+    const first = applyEdits(file, [{ kind: 'partnership', union: 'a+b', set: { married: null } }]).markdown;
+    expect(unions(first)).toEqual([['a+b', '?', '1990', ['c']], ['a+b~2', '2000', undefined, ['d']]]);
+    const second = applyEdits(file, [{ kind: 'partnership', union: 'a+b~2', set: { married: null } }]).markdown;
+    expect(unions(second)).toEqual([['a+b', '1980', '1990', ['c']], ['a+b~2', '?', undefined, ['d']]]);
+  });
+
+  it('removes either one, leaving the other as it was', () => {
+    const childless = '```family\na + b married=1980 divorced=1990\na + b married=2000 divorced=2001\na + b married=2010\n```\n';
+    expect(unions(applyEdits(childless, [{ kind: 'delete-partnership', union: 'a+b' }]).markdown)).toEqual([
+      ['a+b', '2000', '2001', []],
+      ['a+b~2', '2010', undefined, []],
+    ]);
+    expect(unions(applyEdits(childless, [{ kind: 'delete-partnership', union: 'a+b~2' }]).markdown)).toEqual([
+      ['a+b', '1980', '1990', []],
+      ['a+b~2', '2010', undefined, []],
+    ]);
+  });
+
+  it('cannot make two partners, or a parent and child, one person', () => {
+    expect(() => applyEdits(file, [{ kind: 'merge', keep: 'a', drop: 'b' }])).toThrow(/partners/);
+    expect(() => applyEdits(file, [{ kind: 'merge', keep: 'c', drop: 'a' }])).toThrow(/parent/);
+  });
+});
+
+describe('tidying ids', () => {
+  it('passes an id on when its owner moves to a new one, in one go', () => {
+    // Klaus Bauer takes `klaus-bauer`, which frees `klaus` for nobody; the old `klaus-bauer` is someone else.
+    const file = '```family\nperson klaus "Klaus Bauer" born=1958\nperson klaus-bauer "Klaus Bauer"\nperson anna "Anna Bauer"\nperson anna2 "Anna Bauer"\nklaus + anna -> klaus-bauer, anna2\n```\n';
+    const { markdown, renamed } = applyEdits(file, [{ kind: 'tidy' }]);
+    expect(renamed).toEqual({ klaus: 'klaus-bauer-1958', anna: 'anna-bauer', anna2: 'anna-bauer-2' });
+    expect(parseFamily(markdown).unions[0]).toMatchObject({ partners: ['klaus-bauer-1958', 'anna-bauer'], children: ['klaus-bauer', 'anna-bauer-2'] });
+  });
+
+  it('renames 500 people in one go, not one file at a time', () => {
+    const lines = ['```family'];
+    for (let i = 0; i < 500; i++) lines.push(`person p${i} "P${i} Bauer"`, ...(i > 0 ? [`p${i - 1} -> p${i}`] : []));
+    lines.push('```');
+    const started = performance.now();
+    const { renamed } = applyEdits(lines.join('\n'), [{ kind: 'tidy' }]);
+    expect(performance.now() - started).toBeLessThan(1500);
+    expect(Object.keys(renamed)).toHaveLength(500);
+    expect(renamed.p499).toBe('p499-bauer');
+  });
+});

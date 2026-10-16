@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseFamily } from '../src/parser/parse';
-import { layoutFamily, METRICS } from '../src/layout/layout';
+import { assignGenerations, layoutFamily, METRICS } from '../src/layout/layout';
 
 const sample = readFileSync(new URL('../sample/family.md', import.meta.url), 'utf8');
 const graph = parseFamily(sample);
@@ -127,5 +127,39 @@ trini + luan together=?
       lines.slice(i + 1).filter((b) => b.union !== a.union && b.row === a.row && (a.top - b.top) * (a.bottom - b.bottom) < 0),
     );
     expect(crossings).toEqual([]);
+  });
+});
+
+describe('a family in which someone ends up their own ancestor', () => {
+  // 2000 people, two children to every couple, and one typo that closes a loop.
+  const lines: string[] = [];
+  const queue = ['p0'];
+  let count = 1;
+  let last = 'p0';
+  for (const parent of queue) {
+    if (count >= 1340) break;
+    const kids = [`p${count++}`, `p${count++}`];
+    lines.push(`person ${parent} "${parent}" sex=m`, `person w${parent} "Frau von ${parent}"`, `${parent} + w${parent} -> ${kids.join(', ')}`);
+    queue.push(...kids);
+    last = kids[1]!;
+  }
+  lines.push(`${last} -> p0`);
+  const graph = parseFamily(['```family', ...lines, '```'].join('\n'));
+
+  it('still numbers the rows quickly, and keeps them few', () => {
+    expect(graph.people.size).toBeGreaterThan(1900);
+    const started = performance.now();
+    const generation = assignGenerations(graph);
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(Math.max(...generation.values())).toBeLessThan(12);
+    // Only the link that closes the loop is left out.
+    expect(generation.get('p1')).toBe(generation.get('p0')! + 1);
+    expect(generation.get(last)).toBeGreaterThan(generation.get('p0')!);
+  });
+
+  it('keeps a couple of an aunt and her nephew on one row, and bounded', () => {
+    const generation = assignGenerations(parseFamily('```family\nopa + oma -> tante, vater\nvater + mutter -> neffe\ntante + neffe\n```'));
+    expect(generation.get('tante')).toBe(generation.get('neffe'));
+    expect(Math.max(...generation.values())).toBeLessThan(4);
   });
 });

@@ -128,13 +128,22 @@ function longestMarriage(family: Family, now: DateParts): Stats['longestMarriage
       lasting = false;
     } else if (people.some(isDeceased)) {
       const deaths = people.filter(isDeceased).map((p) => parseDate(knownDate(p.died)));
-      end = deaths.some((d) => !d) ? undefined : deaths.sort((a, b) => a!.y - b!.y)[0];
+      end = deaths.some((d) => !d) ? undefined : deaths.sort((a, b) => earlier(a!, b!))[0];
       lasting = false;
     }
     const years = end && yearsBetween(start, end)?.years;
     if (years !== undefined && (!best || years > best.years)) best = { people, years, lasting };
   }
   return best;
+}
+
+/**
+ * Which of two dates comes first, as far as they say. When one only knows
+ * the year or month the other names in full, the full one goes first: it
+ * gives the years to the day.
+ */
+function earlier(a: DateParts, b: DateParts): number {
+  return a.y - b.y || (a.m ?? 13) - (b.m ?? 13) || (a.d ?? 32) - (b.d ?? 32);
 }
 
 function partnersOf(family: Family, union: Union): Person[] {

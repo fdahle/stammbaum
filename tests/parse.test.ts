@@ -189,3 +189,23 @@ describe('remarriage to the same person', () => {
     expect(block('a + b married=1980\na + b divorced=1985').unions).toHaveLength(1);
   });
 });
+
+describe('ids that look like keywords', () => {
+  it('reads `person + anna` as a couple, not as a person called "+"', () => {
+    const graph = parseFamily('```family\nperson person "Person"\nperson anna "Anna"\nperson + anna -> kind\nme -> kind2\n```');
+    expect(graph.people.has('+')).toBe(false);
+    expect(graph.unions.map((u) => [u.partners, u.children])).toEqual([
+      [['person', 'anna'], ['kind']],
+      [['me'], ['kind2']],
+    ]);
+  });
+});
+
+describe('a value with a comma', () => {
+  it('keeps the space after it', () => {
+    const graph = parseFamily('```family\nperson a "A" note=Hallo, Welt nationality=DE, PT\na -> b, c\na adopted=d, e\n```');
+    expect(graph.people.get('a')).toMatchObject({ note: 'Hallo, Welt', nationality: 'DE, PT' });
+    expect(graph.unions[0]!.children).toEqual(['b', 'c', 'd', 'e']);
+    expect(graph.warnings.filter((w) => w.message.startsWith('expected'))).toEqual([]);
+  });
+});

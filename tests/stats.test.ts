@@ -34,6 +34,16 @@ describe('familyStats', () => {
     expect(stats.birthplace).toBeUndefined();
   });
 
+  it('ends a marriage on the day of the first death, not just in its year', () => {
+    // She died first, in March; he in September of the same year — after their 30th anniversary.
+    const family = new Family(
+      parseFamily(
+        '```family\nperson a "A" died=2010-09-01\nperson b "B" died=2010-03-01\na + b married=1980-06-01\n```',
+      ),
+    );
+    expect(familyStats(family, { y: 2026, m: 10, d: 14 }).longestMarriage).toMatchObject({ years: 29, lasting: false });
+  });
+
   it('measures a lasting marriage to today, and survives a family that loops', () => {
     const family = new Family(
       parseFamily('```family\nperson a "A"\nperson b "B"\na + b married=2000-06-01\na -> b\nb -> a\n```'),

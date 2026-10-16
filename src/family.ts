@@ -67,18 +67,38 @@ export class Family {
    * married each other twice has full siblings across both.
    */
   siblings(id: string): Array<{ person: Person; half: boolean }> {
-    const mine = this.parents(id).map((p) => p.id);
     const seen = new Set([id]);
     const found: Array<{ person: Person; half: boolean }> = [];
-    for (const parent of mine) {
-      for (const child of this.children(parent)) {
+    for (const parent of this.parents(id)) {
+      for (const child of this.children(parent.id)) {
         if (seen.has(child.id)) continue;
         seen.add(child.id);
-        const theirs = new Set(this.parents(child.id).map((p) => p.id));
-        found.push({ person: child, half: mine.length !== theirs.size || mine.some((p) => !theirs.has(p)) });
+        found.push({ person: child, half: this.halfSiblings(id, child.id) });
       }
     }
     return [...found.filter((s) => !s.half), ...found.filter((s) => s.half)];
+  }
+
+  /**
+   * Whether two children of a common parent are half brothers or sisters: no
+   * parents in common that are the same on both sides. Birth parents and
+   * adoptive ones count each on their own — an adopted child is a full sibling
+   * of the parents' own children — and a parent nobody knows may well be the
+   * same one, so `m -> a` and `m + p -> b` are not called half.
+   */
+  halfSiblings(a: string, b: string): boolean {
+    const theirs = this.parentSets(b);
+    return !this.parentSets(a).some((mine) => theirs.some((other) => sameParents(mine, other)));
+  }
+
+  /** Birth parents, and adoptive ones, each as a set of their own. */
+  private parentSets(id: string): Array<Set<string>> {
+    const birth = new Set<string>();
+    const adoptive = new Set<string>();
+    for (const union of this.unionsByChild.get(id) ?? []) {
+      for (const partner of union.partners) (union.adopted?.includes(id) ? adoptive : birth).add(partner);
+    }
+    return [birth, adoptive].filter((set) => set.size > 0);
   }
 
   adopted(id: string): boolean {
@@ -288,6 +308,17 @@ function spellings(value: string): string[] {
 }
 
 const UMLAUTS: Record<string, string> = { ä: 'a', ö: 'o', ü: 'u' };
+
+/**
+ * The same parents, as far as the file knows: both alike, or one parent
+ * known on one side and among the parents on the other — the second one
+ * unknown rather than someone else.
+ */
+function sameParents(a: Set<string>, b: Set<string>): boolean {
+  const [fewer, more] = a.size <= b.size ? [a, b] : [b, a];
+  if (fewer.size >= 2 && fewer.size !== more.size) return false;
+  return [...fewer].every((id) => more.has(id));
+}
 
 function isPerson(person: Person | undefined): person is Person {
   return person !== undefined;

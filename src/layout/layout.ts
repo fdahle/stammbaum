@@ -319,41 +319,105 @@ function average(values: number[]): number {
  * - and people with no parents in the file sit right above their children
  *   instead of up on the first row: someone's in-laws belong over them, not
  *   at the top of the page with a line running down past everyone between.
+ *
+ * Everyone who has to share a row is one group, and the groups are laid out
+ * by the longest line of parents and children above them. A file in which
+ * someone ends up their own ancestor — a typo like `p60 -> p0` — or one whose
+ * rows cannot all be kept, such as an aunt married to her nephew, has a
+ * parent-child link that would push rows down forever; that link is left out
+ * here, so the tree still has a bottom.
  */
 export function assignGenerations(graph: FamilyGraph): Map<string, number> {
-  const generation = new Map<string, number>();
-  for (const id of graph.people.keys()) generation.set(id, 0);
-  const gen = (id: string) => generation.get(id) ?? 0;
+  const ids = [...new Set([...graph.people.keys(), ...graph.unions.flatMap((u) => [...u.partners, ...u.children])])];
   const hasParents = new Set(graph.unions.flatMap((u) => u.children));
 
-  let changed = false;
-  const lower = (id: string, to: number) => {
-    if (gen(id) < to) {
-      generation.set(id, to);
-      changed = true;
+  // Partners share a row, and so do the children of one partnership.
+  const leader = new Map(ids.map((id) => [id, id]));
+  const find = (id: string): string => {
+    let root = id;
+    while (leader.get(root) !== root) root = leader.get(root)!;
+    for (let at = id; at !== root; ) {
+      const next = leader.get(at)!;
+      leader.set(at, root);
+      at = next;
     }
+    return root;
   };
+  const join = (members: string[]) => {
+    for (const member of members.slice(1)) leader.set(find(member), find(members[0]!));
+  };
+  for (const union of graph.unions) {
+    join(union.partners);
+    join(union.children);
+  }
+  const groups = [...new Set(ids.map(find))];
 
-  const limit = graph.people.size * 2 + 10;
-  for (let pass = 0; pass < limit; pass++) {
-    changed = false;
-    for (const union of graph.unions) {
-      const partnerGen = Math.max(...union.partners.map(gen));
-      for (const partner of union.partners) lower(partner, partnerGen);
-      const childGen = Math.max(partnerGen + 1, ...union.children.map(gen));
-      for (const child of union.children) lower(child, childGen);
+  // Each group's children's groups, and those links that close a loop: one
+  // group in itself, or back to a group above it.
+  const below = new Map<string, Set<string>>(groups.map((g) => [g, new Set()]));
+  for (const union of graph.unions) {
+    for (const partner of union.partners) {
+      for (const child of union.children) below.get(find(partner))!.add(find(child));
     }
+  }
+  const order: string[] = [];
+  const state = new Map<string, 'open' | 'done'>();
+  for (const start of groups) {
+    if (state.has(start)) continue;
+    state.set(start, 'open');
+    const stack: Array<{ group: string; next: Iterator<string> }> = [{ group: start, next: below.get(start)!.values() }];
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1]!;
+      const step = top.next.next();
+      if (step.done) {
+        state.set(top.group, 'done');
+        order.push(top.group);
+        stack.pop();
+        continue;
+      }
+      const child = step.value;
+      if (state.get(child) === 'open') below.get(top.group)!.delete(child);
+      else if (!state.has(child)) {
+        state.set(child, 'open');
+        stack.push({ group: child, next: below.get(child)!.values() });
+      }
+    }
+  }
+  order.reverse();
+
+  // Rows only ever move down: the longest line from the top, then parents
+  // nobody knows down to their children, until nothing changes.
+  const floor = new Map(groups.map((g) => [g, 0]));
+  const row = new Map<string, number>();
+  const gen = (id: string) => row.get(find(id)) ?? 0;
+  const ownWithChildren = new Map<string, Union[]>();
+  for (const union of graph.unions) {
+    if (union.children.length === 0) continue;
+    for (const partner of union.partners) ownWithChildren.set(partner, [...(ownWithChildren.get(partner) ?? []), union]);
+  }
+  const deepest = groups.length;
+  for (let pass = 0; pass <= ids.length; pass++) {
+    for (const group of order) row.set(group, floor.get(group)!);
+    for (const group of order) {
+      for (const child of below.get(group)!) row.set(child, Math.max(row.get(child)!, row.get(group)! + 1));
+    }
+    let changed = false;
     // Parents of their own nobody knows: down to just above their nearest children.
-    for (const id of graph.people.keys()) {
+    for (const id of ids) {
       if (hasParents.has(id)) continue;
-      const own = graph.unions.filter((u) => u.partners.includes(id) && u.children.length > 0);
+      const own = ownWithChildren.get(id) ?? [];
       // A partner with parents in the file keeps the couple where it is.
       if (own.length === 0 || own.some((u) => u.partners.some((p) => hasParents.has(p)))) continue;
-      lower(id, Math.min(...own.flatMap((u) => u.children.map(gen))) - 1);
+      const to = Math.min(...own.flatMap((u) => u.children.map(gen))) - 1;
+      // Never further down than there are rows — that would be a loop again.
+      if (to > gen(id) && to < deepest) {
+        floor.set(find(id), to);
+        changed = true;
+      }
     }
     if (!changed) break;
   }
-  return generation;
+  return new Map(ids.map((id) => [id, gen(id)]));
 }
 
 /** Moves everything into positive space and pads the edges. */

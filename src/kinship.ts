@@ -43,11 +43,7 @@ function blood(family: Family, from: string, to: string): Blood | undefined {
   }
   // Half siblings share one parent, not both — by who the parents are, not by
   // partnership: a couple who married each other twice has two.
-  if (best?.up === 1 && best.down === 1) {
-    const mine = family.parents(from).map((p) => p.id);
-    const theirs = new Set(family.parents(to).map((p) => p.id));
-    best.half = mine.length !== theirs.size || mine.some((id) => !theirs.has(id));
-  }
+  if (best?.up === 1 && best.down === 1) best.half = family.halfSiblings(from, to);
   return best;
 }
 
