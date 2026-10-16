@@ -120,10 +120,11 @@
     stroke-width: 2px;
   }
 
+  /* 65% of the text colour still reads at 4.5:1 on the tree, in both themes. */
   .union-label {
     font-size: 11px;
     text-anchor: middle;
-    fill: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+    fill: color-mix(in oklab, var(--color-base-content) 65%, transparent);
     font-variant-numeric: tabular-nums;
     paint-order: stroke fill;
     stroke: var(--color-base-200);
@@ -190,7 +191,7 @@
 
   .node-years {
     font-size: 11px;
-    fill: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+    fill: color-mix(in oklab, var(--color-base-content) 65%, transparent);
     font-variant-numeric: tabular-nums;
   }
 
@@ -484,7 +485,7 @@
   .tile-years,
   .focus-dates {
     font-size: 0.6875rem;
-    color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
     font-variant-numeric: tabular-nums;
   }
 
@@ -597,7 +598,16 @@
   }
 
   .focus-card .bubble-html.is-zoomable {
+    padding: 0;
+    border: 0;
+    font: inherit;
+    color: inherit;
     cursor: zoom-in;
+  }
+
+  .focus-card .bubble-html.is-zoomable:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 4px;
   }
 
   .focus-gallery {
@@ -782,7 +792,8 @@
   .relation-arrow {
     /* Level with the middle of the bubble next to it: tile padding + half a bubble − half an icon. */
     margin-top: 32px;
-    color: color-mix(in oklab, var(--color-base-content) 35%, transparent);
+    /* Half the text colour: an icon still at 3:1 against the page. */
+    color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
   }
 
   /* ---- list pages: birthdays, numbers, what is missing ------------------ */
@@ -846,6 +857,18 @@
   }
 
   /* ---- the tree before anyone is in it ----------------------------------- */
+
+  /* While the family is on its way, or when it did not come. */
+  .load-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 18vh 16px 40px;
+    text-align: center;
+  }
 
   .empty-view {
     display: flex;
@@ -1203,10 +1226,6 @@
     display: none;
   }
 
-  .app-bar {
-    padding-top: env(safe-area-inset-top);
-  }
-
   .search {
     position: relative;
     display: none;
@@ -1229,6 +1248,10 @@
   }
 
   /* The hit Enter opens, moved with the arrow keys. */
+  .results .result {
+    cursor: pointer;
+  }
+
   .results .result.is-active {
     background: var(--color-base-200);
   }
@@ -1646,7 +1669,7 @@
 
   .lightbox-close {
     top: calc(12px + env(safe-area-inset-top));
-    right: 12px;
+    right: calc(12px + env(safe-area-inset-right));
   }
 
   .lightbox-previous,
@@ -1656,16 +1679,16 @@
   }
 
   .lightbox-previous {
-    left: 8px;
+    left: calc(8px + env(safe-area-inset-left));
   }
 
   .lightbox-next {
-    right: 8px;
+    right: calc(8px + env(safe-area-inset-right));
   }
 
   .scope-toggle {
     position: absolute;
-    left: 16px;
+    left: calc(16px + env(safe-area-inset-left));
     bottom: calc(24px + env(safe-area-inset-bottom));
     z-index: 2;
     border-radius: 999px;
@@ -1678,15 +1701,15 @@
 
   .fab-fit {
     position: absolute;
-    right: 16px;
+    right: calc(16px + env(safe-area-inset-right));
     bottom: calc(16px + env(safe-area-inset-bottom));
     z-index: 2;
   }
 
   .hint {
     position: absolute;
-    left: 16px;
-    right: 16px;
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
     bottom: calc(88px + env(safe-area-inset-bottom));
     z-index: 4;
     max-width: 480px;
@@ -1700,22 +1723,31 @@
 
   .toast-note {
     position: fixed;
-    left: 16px;
-    right: 16px;
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
     bottom: calc(88px + env(safe-area-inset-bottom));
     z-index: 60;
     max-width: 420px;
     margin-inline: auto;
   }
 
+  /* Above the tree's own buttons at the bottom, not over them. */
   .warnings {
     position: fixed;
-    left: 16px;
-    right: 16px;
-    bottom: calc(16px + env(safe-area-inset-bottom));
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
+    bottom: calc(88px + env(safe-area-inset-bottom));
     z-index: 50;
     max-width: 420px;
-    cursor: pointer;
+    max-height: calc(100dvh - 220px);
+    overflow-y: auto;
+    padding-right: 3rem;
+  }
+
+  .warnings-close {
+    position: absolute;
+    top: 6px;
+    right: 6px;
   }
 
   @media (min-width: 800px) {
@@ -1798,8 +1830,13 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    * {
+    *,
+    *::before,
+    *::after {
       transition: none !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
     }
   }
 }
@@ -1816,4 +1853,14 @@
 .modal.lightbox .btn {
   --btn-fg: #fff;
   color: #fff;
+}
+
+/*
+ * Unlayered too: daisyUI's navbar padding sits in the utilities layer. The bar
+ * keeps clear of the notch and the rounded corners, since index.html asks for
+ * the whole screen (viewport-fit=cover).
+ */
+.app-shell > .app-bar {
+  padding: env(safe-area-inset-top) calc(0.5rem + env(safe-area-inset-right)) 0
+    calc(0.5rem + env(safe-area-inset-left));
 }

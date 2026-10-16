@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { closeOnBack } from './back';
 import { iconButton } from './icons';
 import { qrSvg } from './qr';
 
@@ -69,4 +70,5 @@ export function openShare(url: string): void {
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();
+  closeOnBack(dialog);
 }

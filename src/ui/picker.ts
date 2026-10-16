@@ -2,6 +2,7 @@ import type { Family, SearchOptions } from '../family';
 import { t } from '../i18n';
 import type { Person } from '../parser/types';
 import { displayName, lifespan } from './format';
+import { closeOnBack } from './back';
 import { iconButton } from './icons';
 import { bubble } from './tile';
 
@@ -139,5 +140,6 @@ export function pickPerson(family: Family, options: PickOptions): Promise<Person
     render();
     document.body.append(dialog);
     dialog.showModal();
+    closeOnBack(dialog);
   });
 }

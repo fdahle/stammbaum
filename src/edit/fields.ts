@@ -15,12 +15,21 @@ export const INVALID = Symbol('invalid');
 let counter = 0;
 const nextId = () => `field-${++counter}`;
 
-function labelled(label: string, control: HTMLElement, id: string, hint?: string): HTMLElement {
+/**
+ * A control with its caption above it. A group of radios is no labelable
+ * element: its caption gets an id of its own and the group names it.
+ */
+function labelled(label: string, control: HTMLElement, id: string, hint?: string, group = false): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'form-field';
-  const caption = document.createElement('label');
+  const caption = document.createElement(group ? 'span' : 'label');
   caption.className = 'form-label';
-  caption.htmlFor = id;
+  if (caption instanceof HTMLLabelElement) {
+    caption.htmlFor = id;
+  } else {
+    caption.id = `${id}-label`;
+    control.setAttribute('aria-labelledby', caption.id);
+  }
   caption.textContent = label;
   wrapper.append(caption, control);
   if (hint) {
@@ -115,28 +124,42 @@ export function choiceField<T extends string>(label: string, options: Array<{ va
   row.className = 'join w-full';
   row.id = id;
   row.setAttribute('role', 'radiogroup');
+  const choose = (value: T) => {
+    current = value;
+    paint();
+    for (const listener of listeners) listener(current);
+  };
   const buttons = options.map((option) => {
     const element = document.createElement('button');
     element.type = 'button';
     element.textContent = option.label;
     element.setAttribute('role', 'radio');
-    element.addEventListener('click', () => {
-      current = option.value;
-      paint();
-      for (const listener of listeners) listener(current);
-    });
+    element.addEventListener('click', () => choose(option.value));
     row.append(element);
     return { element, option };
   });
+  // Like native radios: one stop for Tab, the arrow keys move the choice along.
+  row.addEventListener('keydown', (event) => {
+    const steps: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+    const step = steps[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const at = buttons.findIndex(({ option }) => option.value === current);
+    const next = buttons[(at + step + buttons.length) % buttons.length]!;
+    choose(next.option.value);
+    next.element.focus();
+  });
   const paint = () => {
-    for (const { element, option } of buttons) {
+    const chosen = buttons.some(({ option }) => option.value === current);
+    buttons.forEach(({ element, option }, index) => {
       const on = option.value === current;
       element.className = `btn btn-sm join-item flex-1 ${on ? 'btn-primary' : 'btn-ghost bg-base-200'}`;
       element.setAttribute('aria-checked', String(on));
-    }
+      element.tabIndex = on || (!chosen && index === 0) ? 0 : -1;
+    });
   };
   paint();
-  return { element: labelled(label, row, id), value: () => current, onChange: (listener) => void listeners.push(listener) };
+  return { element: labelled(label, row, id, undefined, true), value: () => current, onChange: (listener) => void listeners.push(listener) };
 }
 
 export function checkField(label: string, checked: boolean): Field<boolean> & { onChange(listener: (checked: boolean) => void): void } {
