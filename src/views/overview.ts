@@ -1,4 +1,5 @@
 import type { Family } from '../family';
+import { assignLanes, HOP } from '../layout/lanes';
 import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from '../layout/layout';
 import { familyStamp, photoUrl } from '../data';
 import { familyName, initials, isStandIn, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
@@ -17,6 +18,8 @@ const TAP_SLOP = 10;
 const LONG_PRESS_MS = 500;
 /** Room under the lowest row for the build stamp. */
 const STAMP_SPACE = 32;
+/** Between two families' lines in the same gap, so they never read as one. */
+const LANE = 18;
 
 interface View {
   k: number;
@@ -734,6 +737,18 @@ export class OverviewView {
       hits.append(copy);
     };
     const lanes = assignLanes(this.layout);
+    const busOf = (union: UnionEdge) => union.y + METRICS.rowHeight - 92 + (lanes.get(union.id) ?? 0) * LANE;
+    // Every line that runs downwards, and whose it is — to bridge it where
+    // another family's line runs across, so a crossing never reads as a fork.
+    const coupleOf = (union: UnionEdge) => [...union.partners].sort().join('+');
+    const downs: Array<{ couple: string; x: number; top: number; bottom: number }> = [];
+    for (const union of this.layout.unions) {
+      const children = union.children.map((id) => this.layout.nodes.get(id)).filter((n): n is NodeBox => !!n);
+      if (children.length === 0) continue;
+      const bus = busOf(union);
+      downs.push({ couple: coupleOf(union), x: union.x, top: union.y, bottom: bus });
+      for (const child of children) downs.push({ couple: coupleOf(union), x: child.x, top: bus, bottom: child.y });
+    }
     // A couple who married twice share one line, drawn for the latest marriage
     // and labelled with both.
     const couples = new Map<string, UnionEdge[]>();
@@ -785,8 +800,15 @@ export class OverviewView {
         .filter((n): n is NodeBox => !!n);
       if (children.length === 0) continue;
 
-      const busY = union.y + METRICS.rowHeight - 92 + (lanes.get(union.id) ?? 0) * 15;
+      const busY = busOf(union);
       const xs = children.map((c) => c.x);
+      const from = Math.min(...xs, union.x);
+      const to = Math.max(...xs, union.x);
+      const bridges = downs
+        .filter((down) => down.couple !== coupleOf(union) && down.top < busY - 1 && down.bottom > busY + 1)
+        .map((down) => down.x)
+        .filter((x) => x > from + HOP && x < to - HOP)
+        .sort((a, b) => a - b);
       const descent = svgEl('path', {
         class: 'link link-descent',
         d: [
@@ -794,8 +816,9 @@ export class OverviewView {
           // partner line otherwise.
           `M ${union.x} ${union.y + (rings ? RINGS.radius : partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
           `L ${union.x} ${busY}`,
-          `M ${Math.min(...xs, union.x)} ${busY}`,
-          `L ${Math.max(...xs, union.x)} ${busY}`,
+          `M ${from} ${busY}`,
+          ...bridges.map((x) => `L ${x - HOP} ${busY} A ${HOP} ${HOP} 0 0 1 ${x + HOP} ${busY}`),
+          `L ${to} ${busY}`,
           ...children.map((c) => `M ${c.x} ${busY} L ${c.x} ${c.y - METRICS.bubbleRadius - 4}`),
         ].join(' '),
       });
@@ -886,36 +909,6 @@ function unionLabel(union: UnionEdge): string {
   const to = year(unionEnd(union));
   if (from && to) return `${from}–${to}`;
   return to ? `–${to}` : from;
-}
-
-/**
- * Two families in the same generation whose children sit side by side would
- * otherwise draw their horizontal bus at exactly the same height and read as a
- * single line. Overlapping buses get their own lane.
- */
-function assignLanes(layout: Layout): Map<string, number> {
-  const spans = layout.unions
-    .map((union) => {
-      const xs = [...union.children, ...union.partners]
-        .map((id) => layout.nodes.get(id)?.x)
-        .filter((x): x is number => x !== undefined);
-      return { union, from: Math.min(...xs), to: Math.max(...xs) };
-    })
-    .filter((span) => span.union.children.length > 0)
-    .sort((a, b) => a.from - b.from);
-
-  const lanes = new Map<string, number>();
-  const ends = new Map<string, number[]>();
-  for (const span of spans) {
-    const row = String(span.union.y);
-    const taken = ends.get(row) ?? [];
-    let lane = taken.findIndex((end) => end < span.from - 10);
-    if (lane === -1) lane = taken.length;
-    taken[lane] = span.to;
-    ends.set(row, taken);
-    lanes.set(span.union.id, lane);
-  }
-  return lanes;
 }
 
 /** Everything the tree's stylesheet decides that an exported picture needs to keep. */

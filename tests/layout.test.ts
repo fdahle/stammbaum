@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseFamily } from '../src/parser/parse';
+import { assignLanes } from '../src/layout/lanes';
 import { assignGenerations, layoutFamily, METRICS } from '../src/layout/layout';
 
 const sample = readFileSync(new URL('../sample/family.md', import.meta.url), 'utf8');
@@ -204,5 +205,41 @@ describe('whose family goes where', () => {
       const couple = layout.unions.find((u) => u.children.includes('kind'))!;
       expect(x(layout, 'kind')).toBeCloseTo(couple.x, 5);
     }
+  });
+});
+
+describe('lines that would read as one', () => {
+  const step = METRICS.nodeWidth + METRICS.nodeGap;
+
+  it('keeps everyone’s own line away from where another couple’s line ends', () => {
+    // In the sample, Jonas would land right under his father's second marriage.
+    for (const anchor of [undefined, 'heinrich', 'jonas']) {
+      const { nodes, unions } = layoutFamily(graph, anchor);
+      const hasParents = new Set(unions.flatMap((u) => u.children));
+      for (const union of unions) {
+        if (union.children.length === 0) continue;
+        const row = Math.max(...union.partners.map((p) => nodes.get(p)!.generation));
+        for (const node of nodes.values()) {
+          if (union.children.includes(node.id) || !hasParents.has(node.id) || node.generation !== row + 1) continue;
+          expect(Math.abs(node.x - union.x), `${node.id} under ${union.partners.join(' + ')}`).toBeGreaterThanOrEqual(0.3 * step);
+        }
+      }
+    }
+  });
+
+  it('runs the line that would be crossed higher, so neither crosses the other', () => {
+    const node = (id: string, x: number, generation: number) => [id, { id, x, y: generation * METRICS.rowHeight, generation }] as const;
+    const nodes = new Map([
+      node('detlef', 460, 0), node('petra', 570, 0), node('birgit', 680, 0), node('christian', 790, 0),
+      node('julian', 515, 1), node('simon', 793, 1), node('carolina', 1069, 1), node('felix', 1290, 1),
+    ]);
+    const unions = [
+      { id: 'u1', partners: ['detlef', 'petra'], children: ['julian', 'simon'], x: 515, y: 0 },
+      { id: 'u2', partners: ['birgit', 'christian'], children: ['carolina', 'felix'], x: 735, y: 0 },
+    ];
+    const lanes = assignLanes({ nodes, unions, width: 0, height: 0, metrics: METRICS });
+    // Left to right would put Detlef's line on top: Birgit's line would come
+    // down through it, and Simon's line down through hers.
+    expect(lanes.get('u2')!).toBeLessThan(lanes.get('u1')!);
   });
 });

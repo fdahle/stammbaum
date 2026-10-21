@@ -35,6 +35,13 @@ export const METRICS = {
 };
 
 /**
+ * In places: someone whose own line comes down nearer than this to where
+ * another couple's line ends moves away, until they are this far from it.
+ */
+const NEAR_UNDER = 0.3;
+const CLEAR_UNDER = 0.5;
+
+/**
  * Tidy generational layout.
  *
  * Generations come from a longest-path relaxation (partners share a row).
@@ -297,11 +304,18 @@ function refine(nodes: Map<string, NodeBox>, unions: Union[], passes = 24): void
     }
   }
 
-  // The sweeps end with the parents moving, after their children followed
-  // them: someone with no children of their own goes straight under their
-  // parents last — an only child right in the middle of the couple.
+  // Last, row by row from the top, so that children follow where their
+  // parents ended up: someone with no children of their own goes straight
+  // under their parents — an only child right in the middle of the couple —
+  // and nobody stays where they would seem to hang from someone else's line.
   for (const generation of generations) {
     const row = rows.get(generation)!;
+    underParents(row);
+    stepAside(row, generation);
+  }
+
+  /** The sweeps end with the parents moving, after their children followed them. */
+  function underParents(row: NodeBox[]): void {
     for (const block of blocksOf(row, unions)) {
       if (block.some((node) => (parentIn.get(node.id) ?? []).some((union) => union.children.length > 0))) continue;
       const shifts = block.flatMap((node) => {
@@ -314,6 +328,49 @@ function refine(nodes: Map<string, NodeBox>, unions: Union[], passes = 24): void
       for (const node of block) node.x += shift;
     }
     spaceOut(row);
+  }
+
+  /**
+   * Nobody's own line comes down where another couple's line ends — they
+   * would seem to hang from that couple — and no line passes down through
+   * someone's name to a person further below. Such a block steps aside, as
+   * little as will do, to whichever side has room. Someone who married in has
+   * no line of their own, so nothing can seem to hang them anywhere.
+   */
+  function stepAside(row: NodeBox[], generation: number): void {
+    type Line = { x: number; near: number; clear: number; own: string[]; childrenOnly: boolean };
+    const lines: Line[] = [];
+    for (const union of unions) {
+      if (union.children.length === 0) continue;
+      const top = Math.max(...union.partners.map((p) => nodes.get(p)?.generation ?? -Infinity));
+      const x = mean(union.partners);
+      if (top === generation - 1 && x !== undefined) {
+        lines.push({ x, near: NEAR_UNDER * step, clear: CLEAR_UNDER * step, own: union.children, childrenOnly: true });
+      }
+      for (const child of union.children) {
+        const node = nodes.get(child);
+        const label = METRICS.nodeWidth / 2;
+        if (node && top < generation && node.generation > generation) lines.push({ x: node.x, near: label, clear: label, own: [], childrenOnly: false });
+      }
+    }
+    if (lines.length === 0) return;
+    const hit = (node: NodeBox, line: Line) => !line.own.includes(node.id) && (!line.childrenOnly || parentUnion.has(node.id));
+    const blocks = blocksOf(row, unions);
+    blocks.forEach((block, b) => {
+      // Moves when too near, and then as far as clear of every line.
+      const clashes = (shift: number, reach: 'near' | 'clear') =>
+        block.some((node) => lines.some((line) => hit(node, line) && Math.abs(node.x + shift - line.x) < line[reach]));
+      if (!clashes(0, 'near')) return;
+      const moves = block
+        .flatMap((node) => lines.filter((line) => hit(node, line)).flatMap((line) => [line.x - line.clear - 0.5 - node.x, line.x + line.clear + 0.5 - node.x]))
+        .sort((a, c) => Math.abs(a) - Math.abs(c));
+      const before = blocks[b - 1];
+      const previous = before?.[before.length - 1];
+      const shift = moves.find((move) => !clashes(move, 'clear') && (move >= 0 || !previous || block[0]!.x + move - previous.x >= step));
+      if (shift === undefined) return;
+      for (const node of block) node.x += shift;
+      spaceOut(row);
+    });
   }
 
   /** Restores a row's minimum spacing without changing anyone's order. */
