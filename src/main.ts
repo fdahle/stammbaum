@@ -28,6 +28,7 @@ import { renderPerson } from './views/person';
 import { renderRelation, route as relationRoute } from './views/relation';
 import { renderSource } from './views/source';
 import { renderStats } from './views/stats';
+import { treeBar } from './views/tree-bar';
 import { treeMenu } from './views/tree-menu';
 
 /**
@@ -216,7 +217,7 @@ let scope: 'all' | 'kin' = readStored('stammbaum-scope') === 'kin' ? 'kin' : 'al
 function makeTree(): OverviewView {
   const me = viewer();
   const shown = scope === 'kin' && me ? new Family(family.kinGraph(me)) : family;
-  return new OverviewView(shown, openFromTree, openTreeMenu);
+  return new OverviewView(shown, openFromTree, openTreeMenu, pickOnTree);
 }
 
 /** Everyone, whatever the overview shows — a path between two people may run through anybody. */
@@ -224,7 +225,7 @@ function wholeTree(): OverviewView {
   if (scope === 'all' || !viewer()) return tree;
   let whole = subtrees.get('all');
   if (!whole) {
-    whole = new OverviewView(family, openFromTree, openTreeMenu);
+    whole = new OverviewView(family, openFromTree, openTreeMenu, pickOnTree);
     subtrees.set('all', whole);
   }
   return whole;
@@ -240,16 +241,36 @@ function openFromTree(id: string): void {
   navigate(`#/p/${encodeURIComponent(id)}`);
 }
 
-/** Right-click or long press on a tree: what can be done right there. */
-function openTreeMenu(target: TreeTarget, at: { x: number; y: number }): void {
-  const { title, items } = treeMenu(target, {
+/** What can be done about `target` on a tree. */
+function treeChoices(target: TreeTarget): ReturnType<typeof treeMenu> {
+  return treeMenu(target, {
     family,
     editor: source.editable ? editorContext() : undefined,
     open: openFromTree,
     added: showAdded,
     fit: () => (shownTree ?? tree).fit(),
   });
-  openMenu(at, title, items);
+}
+
+/** Right-click or long press on a tree: what can be done right there — for a finger, as a sheet. */
+function openTreeMenu(target: TreeTarget, at: { x: number; y: number }, touch: boolean): void {
+  const { title, items } = treeChoices(target);
+  openMenu(touch ? undefined : at, title, items);
+}
+
+/**
+ * A tap on a tree on a phone: the same choices, in a bar along the bottom.
+ * Someone who may only look has nothing to choose but opening, so their tap
+ * just opens.
+ */
+function pickOnTree(target: TreeTarget, done: () => void): HTMLElement | undefined {
+  const { title, items } = treeChoices(target);
+  if (!title || items.length === 0) return undefined;
+  if (target.kind === 'person') {
+    if (items.length === 1) return undefined;
+    return treeBar(title, items, done, () => openFromTree(target.id));
+  }
+  return treeBar(title, items, done);
 }
 
 /** Someone new on the tree: brought into view and ringed, so the next step starts there. */
@@ -262,7 +283,7 @@ function subtree(kind: 'up' | 'down', person: Person): OverviewView {
   let overview = subtrees.get(key);
   if (!overview) {
     const graph = kind === 'up' ? family.ancestorsGraph(person.id) : family.descendantsGraph(person.id);
-    overview = new OverviewView(new Family(graph), openFromTree, openTreeMenu);
+    overview = new OverviewView(new Family(graph), openFromTree, openTreeMenu, pickOnTree);
     subtrees.set(key, overview);
   }
   return overview;
@@ -301,8 +322,11 @@ function render(): void {
 function show(route: Route): void {
   backButton.hidden = route.kind === 'tree';
   shownTree = undefined;
-  // A ring from the last search would read as part of whatever comes next.
-  for (const overview of [tree, ...subtrees.values()]) overview.unhighlight();
+  // A ring from the last search, or a tapped person's bar, would read as part of whatever comes next.
+  for (const overview of [tree, ...subtrees.values()]) {
+    overview.unhighlight();
+    overview.unpick();
+  }
 
   switch (route.kind) {
     case 'person': {
