@@ -30,7 +30,7 @@ import { renderRelation, route as relationRoute } from './views/relation';
 import { renderSource } from './views/source';
 import { renderStats } from './views/stats';
 import { treeBar } from './views/tree-bar';
-import { treeMenu } from './views/tree-menu';
+import { addMenu, treeMenu } from './views/tree-menu';
 
 /**
  * Three-way appearance switch. "system" leaves the choice to the OS: daisyUI's
@@ -337,6 +337,7 @@ function show(route: Route): void {
           viewer: viewer(),
           pickRelative,
           edit: source.editable ? (someone) => openEditor(someone, editorContext()) : undefined,
+          add: source.editable ? (someone) => openMenu(undefined, t().addMenu, addMenu(family, someone, editorContext())) : undefined,
         }),
       );
       document.title = `${displayName(person)} — ${familyTitle()}`;
