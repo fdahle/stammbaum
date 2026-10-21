@@ -18,6 +18,7 @@ import { displayName, lifespan, nameStandIns, shortName, today } from './ui/form
 import { icon, iconButton, type IconName } from './ui/icons';
 import { closeMenu, openMenu } from './ui/menu';
 import { pickPerson } from './ui/picker';
+import { setShowsCauses, showsCauses } from './ui/prefs';
 import { canShare, openShare } from './ui/share';
 import { readStored, writeStored } from './ui/storage';
 import { bubble } from './ui/tile';
@@ -686,6 +687,24 @@ function renderMenu(): void {
   }
 
   const mode = (readStored('stammbaum-mode') ?? 'system') as Mode;
+  // Only once the family has any to hide.
+  const causes = family.people().some((person) => person.deathcause)
+    ? [
+        group(
+          t().causes,
+          segmented(
+            (['show', 'hide'] as const).map((id) => ({ id, label: t().causesModes[id] })),
+            showsCauses() ? 'show' : 'hide',
+            (id) => {
+              setShowsCauses(id === 'show');
+              render();
+              renderMenu();
+            },
+          ),
+          hint(t().causesHint),
+        ),
+      ]
+    : [];
   menuPanel.replaceChildren(
     group(t().more, more),
     group(
@@ -713,6 +732,7 @@ function renderMenu(): void {
         },
       ),
     ),
+    ...causes,
     group(t().saveTree, save, hint(t().saveHint)),
   );
 }

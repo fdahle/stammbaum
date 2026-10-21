@@ -16,6 +16,8 @@ export interface Person {
   note?: string;
   birthplace?: string;
   deathplace?: string;
+  /** What they died of — shown only where a viewer has not hidden it (see prefs.ts). */
+  deathcause?: string;
   /** Countries as ISO codes (`DE`), or as written when there is none — see countries.ts. */
   birthcountry?: string;
   deathcountry?: string;

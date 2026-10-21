@@ -4,6 +4,7 @@ import { t } from '../i18n';
 import { isDeceased, knownDate, unionEnd, unionStart, unionStatus, type Person, type Union } from '../parser/types';
 import { PERSON_FIELDS, personValue, type Changes, type Edit, type PersonField, type UnionField } from '../parser/write';
 import { shortName, year } from '../ui/format';
+import { showsCauses } from '../ui/prefs';
 import { pickPerson } from '../ui/picker';
 import { button, openSheet, sheetActions, type Sheet } from '../ui/sheet';
 import { checkField, choiceField, countryField, dateField, INVALID, pair, textField, type Field } from './fields';
@@ -71,6 +72,11 @@ function personForm(person: Person | undefined, short = false): PersonForm {
     const death = document.createElement('div');
     death.className = 'form-group';
     death.append(died.element, pair(rest.deathplace, rest.deathcountry));
+    // Hidden on this device, it is not asked for either — and kept as it was.
+    if (showsCauses()) {
+      rest.deathcause = textField(fields.deathcause, person?.deathcause);
+      death.append(rest.deathcause.element);
+    }
     death.hidden = !deceased.value();
     deceased.onChange((on) => (death.hidden = !on));
     rest.job = textField(fields.job, person?.job);
@@ -101,6 +107,7 @@ function personForm(person: Person | undefined, short = false): PersonForm {
       const birth = born.value();
       if (birth === INVALID) return t().invalidDate(fields.born);
       values.born = birth;
+      values.deathcause = person?.deathcause ?? null;
       for (const [key, field] of Object.entries(rest) as Array<[PersonField, Field<string | null>]>) values[key] = field.value();
       if (deceased && died) {
         const death = died.value();
@@ -111,6 +118,7 @@ function personForm(person: Person | undefined, short = false): PersonForm {
         if (!deceased.value()) {
           values.deathplace = null;
           values.deathcountry = null;
+          values.deathcause = null;
         }
       }
       return values;

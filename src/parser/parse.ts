@@ -18,6 +18,7 @@ import {
  *   person <id> "<Name>" [key=value ...]     born= died= photo= maiden= nick= note= sex=
  *                                            birthplace= deathplace= job= lives= photos=
  *                                            birthcountry= deathcountry= country= nationality=
+ *                                            deathcause=
  *   <a> + <b> [key=value ...]                married= divorced= together= separated= adopted=
  *   <a> + <b> -> <child>, <child>            children of that union
  *   <a> -> <child>                           children with an unknown second parent
@@ -174,7 +175,7 @@ function unescape(value: string): string {
 const PERSON_KEYS = new Set([
   'born', 'died', 'photo', 'maiden', 'nick', 'note', 'sex',
   'birthplace', 'deathplace', 'job', 'lives', 'photos',
-  'birthcountry', 'deathcountry', 'country', 'nationality',
+  'birthcountry', 'deathcountry', 'country', 'nationality', 'deathcause',
 ]);
 /** `w` for weiblich, since the people writing the file speak German. */
 const SEXES = new Map<string, Sex>([

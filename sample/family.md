@@ -10,7 +10,7 @@ the app picks up instead whenever it exists — see the README.
 
 | Statement | Meaning |
 | --- | --- |
-| `person <id> "<Name>" key=value ...` | declares a person. Keys: `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex` (`m` or `f`), `birthplace`, `deathplace`, `job`, `lives`, `photos`, `birthcountry`, `deathcountry`, `country` (where they live), `nationality` — countries as ISO codes: `DE`, `PT` |
+| `person <id> "<Name>" key=value ...` | declares a person. Keys: `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex` (`m` or `f`), `birthplace`, `deathplace`, `job`, `lives`, `photos`, `birthcountry`, `deathcountry`, `country` (where they live), `nationality`, `deathcause` — countries as ISO codes: `DE`, `PT` |
 | `<a> + <b> married=1956 divorced=1974` | a partnership. Remarriage = a second `+` line with the new partner |
 | `<a> + <b> together=2015 separated=2020` | an unmarried couple — `together` instead of `married`, `separated` instead of `divorced` |
 | `<a> + <b> divorced=?` | `?` or `true` instead of a date: it happened, the year is unknown or nobody's business — no year is shown |
@@ -30,7 +30,7 @@ Photos are file names inside the `photos/` folder next to this file.
 me jonas
 
 %% ---- Generation 1 -------------------------------------------------------
-person heinrich  "Heinrich Bauer"    sex=m born=1931-04-02 died=2011-08-17 photo=heinrich.svg photos=haus-lindau.svg birthplace=Lindau birthcountry=DE deathplace=Lindau deathcountry=DE job=Schreiner note="Baute das Haus in Lindau."
+person heinrich  "Heinrich Bauer"    sex=m born=1931-04-02 died=2011-08-17 photo=heinrich.svg photos=haus-lindau.svg birthplace=Lindau birthcountry=DE deathplace=Lindau deathcountry=DE deathcause=Herzinfarkt job=Schreiner note="Baute das Haus in Lindau."
 person elisabeth "Elisabeth Bauer"   sex=f born=1934-11-23 maiden=Vogt photo=elisabeth.svg nick=Oma birthplace=Kempten lives=Lindau
 person werner    "Werner Schmitt"    sex=m born=1935-06-30 died=2019-02-11
 person ingrid    "Ingrid Schmitt"    sex=f born=1939-09-08 maiden=Hoffmann photo=ingrid.svg
