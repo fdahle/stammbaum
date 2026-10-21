@@ -218,7 +218,7 @@ let scope: 'all' | 'kin' = readStored('stammbaum-scope') === 'kin' ? 'kin' : 'al
 function makeTree(): OverviewView {
   const me = viewer();
   const shown = scope === 'kin' && me ? new Family(family.kinGraph(me)) : family;
-  return new OverviewView(shown, openFromTree, openTreeMenu, pickOnTree);
+  return new OverviewView(shown, openFromTree, openTreeMenu, pickOnTree, me);
 }
 
 /** Everyone, whatever the overview shows — a path between two people may run through anybody. */
@@ -226,7 +226,7 @@ function wholeTree(): OverviewView {
   if (scope === 'all' || !viewer()) return tree;
   let whole = subtrees.get('all');
   if (!whole) {
-    whole = new OverviewView(family, openFromTree, openTreeMenu, pickOnTree);
+    whole = new OverviewView(family, openFromTree, openTreeMenu, pickOnTree, viewer());
     subtrees.set('all', whole);
   }
   return whole;
@@ -284,7 +284,7 @@ function subtree(kind: 'up' | 'down', person: Person): OverviewView {
   let overview = subtrees.get(key);
   if (!overview) {
     const graph = kind === 'up' ? family.ancestorsGraph(person.id) : family.descendantsGraph(person.id);
-    overview = new OverviewView(new Family(graph), openFromTree, openTreeMenu, pickOnTree);
+    overview = new OverviewView(new Family(graph), openFromTree, openTreeMenu, pickOnTree, person.id);
     subtrees.set(key, overview);
   }
   return overview;

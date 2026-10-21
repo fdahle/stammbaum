@@ -69,8 +69,10 @@ export class OverviewView {
     private readonly onSelect: (id: string) => void,
     private readonly onContext?: ContextHandler,
     private readonly onPick?: PickHandler,
+    /** Whose own family starts on the left — whoever is looking. */
+    anchor?: string,
   ) {
-    this.layout = layoutFamily(family.graph);
+    this.layout = layoutFamily(family.graph, anchor ?? family.graph.me);
     this.height = this.layout.height + STAMP_SPACE;
     this.element = document.createElement('div');
     this.element.className = 'overview';
