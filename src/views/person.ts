@@ -29,6 +29,8 @@ export interface PersonContext {
   pickRelative(person: Person): void;
   /** Opens the editor for `person` — only there when whoever is looking may edit. */
   edit?: ((person: Person) => void) | undefined;
+  /** Offers what can be added to `person`: relatives, a photo. Also only for whoever may edit. */
+  add?: ((person: Person) => void) | undefined;
 }
 
 /**
@@ -309,6 +311,9 @@ function actions(family: Family, person: Person, context: PersonContext): HTMLEl
   add('link', t().relatedTo, () => context.pickRelative(person));
   if (family.parents(person.id).length > 0) add('up', t().ancestors, `#/up/${id}`);
   if (family.children(person.id).length > 0) add('down', t().descendants, `#/down/${id}`);
+  // The same choices as on the tree, not only deep in the editor.
+  const { add: adding } = context;
+  if (adding) add('plus', t().addMenu, () => adding(person));
   return row;
 }
 
