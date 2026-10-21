@@ -163,3 +163,46 @@ describe('a family in which someone ends up their own ancestor', () => {
     expect(Math.max(...generation.values())).toBeLessThan(4);
   });
 });
+
+describe('whose family goes where', () => {
+  // Her family is written first; his comes further down the file.
+  const graph = parseFamily(
+    [
+      '```family',
+      'oma-s + opa-s -> mutter-s, tante-s',
+      'mutter-s + vater-s divorced=? -> sie, schwester',
+      'tante-s -> cousin-s',
+      'oma-e + opa-e -> mutter-e',
+      'mutter-e + vater-e -> er, bruder',
+      'bruder + frau-b',
+      'er + sie married=2022 -> kind',
+      '```',
+    ].join('\n'),
+  );
+  const x = (layout: ReturnType<typeof layoutFamily>, id: string) => layout.nodes.get(id)!.x;
+
+  it('starts with the own family of whoever is looking, and puts their partner’s to the right', () => {
+    const his = layoutFamily(graph, 'er');
+    expect(x(his, 'oma-e')).toBeLessThan(x(his, 'oma-s'));
+    expect(x(his, 'er')).toBeLessThan(x(his, 'sie'));
+    const hers = layoutFamily(graph, 'sie');
+    expect(x(hers, 'oma-s')).toBeLessThan(x(hers, 'oma-e'));
+  });
+
+  it('keeps the sides however the file is ordered', () => {
+    const shuffled = parseFamily(
+      '```family\noma-e + opa-e -> mutter-e\nmutter-e + vater-e -> er, bruder\nbruder + frau-b\noma-s + opa-s -> mutter-s, tante-s\nmutter-s + vater-s divorced=? -> sie, schwester\ntante-s -> cousin-s\ner + sie married=2022 -> kind\n```',
+    );
+    const before = layoutFamily(graph, 'er');
+    const after = layoutFamily(shuffled, 'er');
+    expect(x(after, 'oma-e') < x(after, 'oma-s')).toBe(x(before, 'oma-e') < x(before, 'oma-s'));
+  });
+
+  it('puts an only child right in the middle of the couple, from either side', () => {
+    for (const anchor of ['er', 'sie', undefined]) {
+      const layout = layoutFamily(graph, anchor);
+      const couple = layout.unions.find((u) => u.children.includes('kind'))!;
+      expect(x(layout, 'kind')).toBeCloseTo(couple.x, 5);
+    }
+  });
+});

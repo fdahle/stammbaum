@@ -34,6 +34,13 @@ describe('countries', () => {
     expect(countryList(felix.nationality)).toEqual(['DE', 'NL']);
   });
 
+  it('puts a cause of death after the place and country of death', () => {
+    const file = '```family\nperson oma "Oma" died=2011 deathplace=Lindau deathcountry=DE job=Lehrerin\n```\n';
+    const { markdown } = applyEdits(file, [{ kind: 'person', id: 'oma', set: { deathcause: 'Herzinfarkt' } }]);
+    expect(markdown).toContain('person oma "Oma" died=2011 deathplace=Lindau deathcountry=DE deathcause=Herzinfarkt job=Lehrerin');
+    expect(parseFamily(markdown).people.get('oma')?.deathcause).toBe('Herzinfarkt');
+  });
+
   it('are found by name and counted in the numbers', () => {
     const family = new Family(
       parseFamily('```family\nperson a "Anna" birthcountry=DE country=NO\nperson b "Ben" birthcountry=DE country=NL\nperson c "Cleo" birthcountry=NL\n```\n'),

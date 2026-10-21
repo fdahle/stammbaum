@@ -16,6 +16,7 @@ import {
 } from '../parser/types';
 import { bubble, tile } from '../ui/tile';
 import { ageOf, displayName, hasBirthday, longDate, parseDate, shortName, today, year, yearsBetween } from '../ui/format';
+import { showsCauses } from '../ui/prefs';
 import { icon, weddingRings, RINGS, type IconName } from '../ui/icons';
 import { openLightbox } from '../ui/lightbox';
 
@@ -244,6 +245,7 @@ function focusCard(
 
   const age = ageOf(person, now);
   if (age) card.append(line('focus-age', age.final ? t().ageAtDeath(age.years, age.approx) : t().age(age.years, age.approx)));
+  if (person.deathcause && isDeceased(person) && showsCauses()) card.append(line('focus-lives', t().deathcause(person.deathcause)));
   if (hasBirthday(person, now)) {
     const badge = line('focus-birthday badge badge-accent', t().birthdayToday);
     card.append(badge);

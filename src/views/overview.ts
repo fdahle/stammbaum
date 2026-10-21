@@ -30,8 +30,14 @@ let clips = 0;
 /** What a right-click or a long press on the tree was on. */
 export type TreeTarget = { kind: 'person'; id: string } | { kind: 'union'; id: string } | { kind: 'canvas' };
 
-/** Asks for the menu of `target`, at a point in the window. */
-export type ContextHandler = (target: TreeTarget, at: { x: number; y: number }) => void;
+/** Asks for the menu of `target`, at a point in the window — or, for a finger, wherever a finger reaches it. */
+export type ContextHandler = (target: TreeTarget, at: { x: number; y: number }, touch: boolean) => void;
+
+/**
+ * A finger tapped `target`: the bar to show for it, or nothing when there is
+ * nothing to do but open it. `done` takes the bar away again.
+ */
+export type PickHandler = (target: TreeTarget, done: () => void) => HTMLElement | undefined;
 
 /**
  * The whole tree in one SVG, driven entirely by gestures: drag to pan, pinch to
@@ -55,13 +61,18 @@ export class OverviewView {
   private focus: string | undefined;
   private animation = 0;
   private momentum = 0;
+  /** What a finger last tapped, and the bar of what can be done about it. */
+  private picked: { target: TreeTarget; bar: HTMLElement } | undefined;
 
   constructor(
     private readonly family: Family,
     private readonly onSelect: (id: string) => void,
     private readonly onContext?: ContextHandler,
+    private readonly onPick?: PickHandler,
+    /** Whose own family starts on the left — whoever is looking. */
+    anchor?: string,
   ) {
-    this.layout = layoutFamily(family.graph);
+    this.layout = layoutFamily(family.graph, anchor ?? family.graph.me);
     this.height = this.layout.height + STAMP_SPACE;
     this.element = document.createElement('div');
     this.element.className = 'overview';
@@ -228,6 +239,48 @@ export class OverviewView {
     this.highlighted = undefined;
   }
 
+  /**
+   * Marks `target` and puts its bar at the bottom, the way a map does with a
+   * place. False when there is no bar for it, and a tap means what it always did.
+   */
+  private pick(target: TreeTarget): boolean {
+    this.unpick();
+    const bar = this.onPick?.(target, () => this.unpick());
+    if (!bar) return false;
+    const marked =
+      target.kind === 'person'
+        ? [this.nodeElements.get(target.id)]
+        : target.kind === 'union'
+          ? [...this.svg.querySelectorAll(`[data-union="${CSS.escape(target.id)}"]`)]
+          : [];
+    for (const element of marked) element?.classList.add('is-picked');
+    this.picked = { target, bar };
+    this.element.classList.add('has-bar');
+    this.element.append(bar);
+    if (target.kind === 'person') this.clearOfBar(target.id, bar.getBoundingClientRect().height);
+    return true;
+  }
+
+  /** Takes the mark and the bar away again. */
+  unpick(): void {
+    if (!this.picked) return;
+    for (const element of this.svg.querySelectorAll('.is-picked')) element.classList.remove('is-picked');
+    this.picked.bar.remove();
+    this.picked = undefined;
+    this.element.classList.remove('has-bar');
+  }
+
+  /** Moves the tree up just enough that the bar does not cover whoever it is about. */
+  private clearOfBar(id: string, inset: number): void {
+    const node = this.layout.nodes.get(id);
+    const box = this.svg.getBoundingClientRect();
+    if (!node || box.width === 0) return;
+    const { k, x, y } = this.view;
+    const bottom = y + (node.y + METRICS.bubbleRadius + 60) * k;
+    const limit = box.height - inset - 24;
+    if (bottom > limit) this.animateTo({ k, x, y: y - (bottom - limit) });
+  }
+
   // ---- viewport -----------------------------------------------------------
 
   private set(view: View): void {
@@ -303,6 +356,7 @@ export class OverviewView {
     let centre = { x: 0, y: 0 };
     let travelled = 0;
     let pressed: string | undefined;
+    let pressedUnion: string | undefined;
     let velocity = { x: 0, y: 0 };
     let lastMove = 0;
     let lastTap = { t: 0, x: 0, y: 0 };
@@ -341,6 +395,7 @@ export class OverviewView {
       // Pointer capture retargets later events at the <svg>, so remember now
       // what was actually pressed.
       pressed = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+      pressedUnion = (event.target as Element | null)?.closest<SVGElement>('[data-union]')?.dataset.union;
 
       held = false;
       clearTimeout(longPress);
@@ -350,7 +405,7 @@ export class OverviewView {
           if (travelled >= TAP_SLOP || pointers.size !== 1) return;
           held = true;
           navigator.vibrate?.(10);
-          this.openContext(at.x, at.y);
+          this.openContext(at.x, at.y, true);
         }, LONG_PRESS_MS);
       }
     });
@@ -397,13 +452,22 @@ export class OverviewView {
       if (held) {
         held = false;
         pressed = undefined;
+        swallowClick();
         return;
       }
 
       if (travelled < TAP_SLOP) {
+        // A finger picks first, with what can be done right there; a second
+        // tap on the same person, or a mouse, opens them.
+        const touch = event.pointerType !== 'mouse';
+        const picked = this.picked?.target;
         if (pressed) {
-          this.onSelect(pressed);
+          const again = picked?.kind === 'person' && picked.id === pressed;
+          if (!touch || again || !this.pick({ kind: 'person', id: pressed })) this.onSelect(pressed);
+        } else if (touch && pressedUnion && this.pick({ kind: 'union', id: pressedUnion })) {
+          // The partnership's own bar is up.
         } else {
+          this.unpick();
           const point = local(event);
           const isDouble =
             event.timeStamp - lastTap.t < DOUBLE_TAP_MS &&
@@ -440,7 +504,7 @@ export class OverviewView {
       event.preventDefault();
       if (!this.onContext || performance.now() - keyboardMenu < 500) return;
       if (lastPointer === 'touch' || lastPointer === 'pen') return;
-      this.openContext(event.clientX, event.clientY);
+      this.openContext(event.clientX, event.clientY, false);
     });
 
     // Tabbing to someone off screen brings them into view. A click focuses too,
@@ -467,7 +531,11 @@ export class OverviewView {
         keyboardMenu = performance.now();
         const box = (node ?? this.svg).getBoundingClientRect();
         const at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-        this.onContext(id ? { kind: 'person', id } : { kind: 'canvas' }, at);
+        this.onContext(id ? { kind: 'person', id } : { kind: 'canvas' }, at, false);
+        return;
+      }
+      if (event.key === 'Escape' && this.picked) {
+        this.unpick();
         return;
       }
       const pan: Record<string, [number, number]> = {
@@ -490,12 +558,12 @@ export class OverviewView {
   }
 
   /** The menu for whatever is under a point in the window: a person, a line between people, or nothing. */
-  private openContext(x: number, y: number): void {
+  private openContext(x: number, y: number, touch: boolean): void {
     const hit = document.elementFromPoint(x, y);
     const id = hit?.closest<SVGGElement>('.node')?.dataset.id;
     const union = hit?.closest<SVGElement>('[data-union]')?.dataset.union;
     const target: TreeTarget = id ? { kind: 'person', id } : union ? { kind: 'union', id: union } : { kind: 'canvas' };
-    this.onContext?.(target, { x, y });
+    this.onContext?.(target, { x, y }, touch);
   }
 
   private doubleTap(x: number, y: number): void {
@@ -571,8 +639,9 @@ export class OverviewView {
     this.svg.classList.add('is-exporting');
     root.dataset.theme = 'light';
     // A picture for the whole family: no ring for whoever happens to be looking.
-    const personal = [...this.svg.querySelectorAll('.is-me, .is-focused')];
-    const marks = personal.map((element) => [...element.classList].filter((c) => c === 'is-me' || c === 'is-focused'));
+    const MARKS = ['is-me', 'is-focused', 'is-picked'];
+    const personal = [...this.svg.querySelectorAll(MARKS.map((c) => `.${c}`).join(', '))];
+    const marks = personal.map((element) => [...element.classList].filter((c) => MARKS.includes(c)));
     personal.forEach((element, i) => element.classList.remove(...marks[i]!));
 
     const clone = this.svg.cloneNode(true) as SVGSVGElement;
@@ -945,6 +1014,20 @@ function mix(previous: number, next: number, weight: number): number {
 
 function reducedMotion(): boolean {
   return matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * Some browsers still click when a finger lets go after a long press — on
+ * whatever opened under it, the menu sheet's backdrop say, which would close
+ * it again at once.
+ */
+function swallowClick(): void {
+  const swallow = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  addEventListener('click', swallow, { capture: true, once: true });
+  setTimeout(() => removeEventListener('click', swallow, { capture: true }), 400);
 }
 
 function clamp(value: number, min: number, max: number): number {

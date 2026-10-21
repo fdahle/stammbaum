@@ -229,7 +229,7 @@ nina + david together=2012 separated=2018
 
 **Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`,
 `birthplace`, `deathplace`, `job`, `lives`, `photos`, `birthcountry`,
-`deathcountry`, `country`, `nationality`.
+`deathcountry`, `country`, `nationality`, `deathcause`.
 **Partnership keys** — `married`, `divorced`, `together`, `separated`,
 `children`, `adopted`.
 
@@ -280,6 +280,11 @@ Notes:
   from whatever is typed ("Norwegen", "Norway", "no"); a country that no
   longer is one, such as `birthcountry=DDR`, stays as written. The numbers
   page lists the countries the family was born in and lives in today.
+- `deathcause` says what someone died of: `deathcause=Herzinfarkt`. It is
+  shown on their card only, never on the tree, in search, in the numbers or
+  among what is missing. Once anyone in the file has one, the settings can
+  hide them on that device — on the tablet the children use, say — and the
+  editor then leaves the field out and keeps what was there.
 - A person whose id the app made from their name — `klaus-bauer` for *Klaus Bauer* —
   gets a new one when renamed in the app: a stand-in *Mutter von Felix* named
   *Birgit Dahle* becomes `birgit-dahle` everywhere in the file. Ids written by hand

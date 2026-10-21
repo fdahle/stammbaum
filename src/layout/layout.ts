@@ -41,8 +41,13 @@ export const METRICS = {
  * Horizontal placement is a recursive walk: a person's partners sit next to
  * them, each partnership's children are laid out as a band underneath, and the
  * partner row is then slid to sit above the middle of its children.
+ *
+ * Which side a family lands on follows `anchor` — whoever is looking: their
+ * own ancestors start on the left, their partner's family stands to the
+ * right. Without one, the oldest people go first in file order, so the sides
+ * can change when someone new is written further up the file.
  */
-export function layoutFamily(graph: FamilyGraph): Layout {
+export function layoutFamily(graph: FamilyGraph, anchor: string | undefined = graph.me): Layout {
   const generation = assignGenerations(graph);
   const unionsByPerson = new Map<string, Union[]>();
   for (const union of graph.unions) {
@@ -161,8 +166,10 @@ export function layoutFamily(graph: FamilyGraph): Layout {
   // a family whose child is already on the page, married into it, comes next,
   // right beside that child: in-laws' parents and siblings then stand over
   // them, instead of across someone else's branch.
+  const first = lineage(graph, anchor);
+  const rank = (id: string) => first.get(id) ?? Infinity;
   const pending = [...graph.people.keys()].sort(
-    (a, b) => (generation.get(a) ?? 0) - (generation.get(b) ?? 0),
+    (a, b) => rank(a) - rank(b) || (generation.get(a) ?? 0) - (generation.get(b) ?? 0),
   );
   const attached = (id: string): number => {
     if (hasParents.has(id)) return -Infinity;
@@ -197,6 +204,35 @@ export function layoutFamily(graph: FamilyGraph): Layout {
   });
 
   return normalise(nodes, unions);
+}
+
+/**
+ * The oldest ancestors of `anchor`, in the order their families go onto the
+ * page: up through each parent in the order the file names them, then the
+ * same for each partner — so one's own family is on the left, and the family
+ * one married into on the right of it. Whoever is written first in the file
+ * no longer decides.
+ */
+function lineage(graph: FamilyGraph, anchor: string | undefined): Map<string, number> {
+  const order = new Map<string, number>();
+  if (anchor === undefined || !graph.people.has(anchor)) return order;
+  const parents = new Map<string, string[]>();
+  for (const union of graph.unions) {
+    for (const child of union.children) if (!parents.has(child)) parents.set(child, union.partners);
+  }
+  const seen = new Set<string>();
+  const up = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const above = parents.get(id);
+    if (!above) order.set(id, order.size);
+    else for (const parent of above) up(parent);
+  };
+  up(anchor);
+  for (const union of graph.unions) {
+    if (union.partners.includes(anchor)) for (const partner of union.partners) up(partner);
+  }
+  return order;
 }
 
 /**
@@ -257,12 +293,35 @@ function refine(nodes: Map<string, NodeBox>, unions: Union[], passes = 24): void
         const shift = average(shifts);
         for (const node of block) node.x += shift;
       }
-      // Restore the row's minimum spacing without changing anyone's order.
-      for (let i = 1; i < row.length; i++) {
-        const previous = row[i - 1]!;
-        const node = row[i]!;
-        if (node.x - previous.x < step) node.x = previous.x + step;
-      }
+      spaceOut(row);
+    }
+  }
+
+  // The sweeps end with the parents moving, after their children followed
+  // them: someone with no children of their own goes straight under their
+  // parents last — an only child right in the middle of the couple.
+  for (const generation of generations) {
+    const row = rows.get(generation)!;
+    for (const block of blocksOf(row, unions)) {
+      if (block.some((node) => (parentIn.get(node.id) ?? []).some((union) => union.children.length > 0))) continue;
+      const shifts = block.flatMap((node) => {
+        const above = parentUnion.get(node.id);
+        const target = above && mean(above.partners);
+        return target === undefined ? [] : [target - node.x];
+      });
+      if (shifts.length === 0) continue;
+      const shift = average(shifts);
+      for (const node of block) node.x += shift;
+    }
+    spaceOut(row);
+  }
+
+  /** Restores a row's minimum spacing without changing anyone's order. */
+  function spaceOut(row: NodeBox[]): void {
+    for (let i = 1; i < row.length; i++) {
+      const previous = row[i - 1]!;
+      const node = row[i]!;
+      if (node.x - previous.x < step) node.x = previous.x + step;
     }
   }
 }

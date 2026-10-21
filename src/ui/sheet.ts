@@ -5,6 +5,8 @@ import { iconButton } from './icons';
 export interface Sheet {
   /** Where the content goes. */
   body: HTMLElement;
+  /** The title, for a sheet that changes what it is about. */
+  heading: HTMLElement;
   close(): void;
 }
 
@@ -47,7 +49,7 @@ export function openSheet(title: string, onClose?: () => void): Sheet {
   document.body.append(dialog);
   dialog.showModal();
   closeOnBack(dialog);
-  return { body, close: () => dialog.close() };
+  return { body, heading, close: () => dialog.close() };
 }
 
 /** A row of buttons at the end of a sheet; the first is the one that matters. */

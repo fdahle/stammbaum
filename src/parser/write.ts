@@ -11,7 +11,7 @@ import { unionId, type FamilyGraph, type Person, type Union } from './types';
 
 export const PERSON_FIELDS = [
   'name', 'nick', 'maiden', 'sex', 'born', 'died', 'birthplace', 'deathplace', 'job', 'lives', 'note', 'photo', 'photos',
-  'birthcountry', 'deathcountry', 'country', 'nationality',
+  'birthcountry', 'deathcountry', 'country', 'nationality', 'deathcause',
 ] as const;
 export type PersonField = (typeof PERSON_FIELDS)[number];
 
@@ -492,6 +492,7 @@ function swapIds(doc: Doc, ids: Map<string, string>): void {
 const BESIDE: Partial<Record<PersonField, PersonField>> = {
   birthcountry: 'birthplace',
   deathcountry: 'deathplace',
+  deathcause: 'deathcountry',
   country: 'lives',
   nationality: 'country',
 };
@@ -499,7 +500,7 @@ const BESIDE: Partial<Record<PersonField, PersonField>> = {
 /** The order new person lines list their keys in — the order the sample uses. */
 const PERSON_ORDER: PersonField[] = [
   'sex', 'born', 'died', 'photo', 'photos', 'birthplace', 'birthcountry', 'deathplace', 'deathcountry',
-  'maiden', 'nick', 'job', 'lives', 'country', 'nationality', 'note',
+  'deathcause', 'maiden', 'nick', 'job', 'lives', 'country', 'nationality', 'note',
 ];
 
 function insertPerson(doc: Doc, id: string, set: Changes<PersonField>, at: number): void {
